@@ -240,17 +240,21 @@ def main(args):
         gc.collect()
         log_memory("After DF Cleanup")
         
+        # BEAST MODE for RTX 3090 (128GB RAM) 🚀
+        # Increased Batch Size for massive throughput
+        BATCH_SIZE = 1024 
+        NUM_WORKERS = 8
+        
         # Create Datasets
         logger.info("Initializing Lazy Datasets...")
         dataset = LazySequenceDataset(train_feats, train_times, train_targets, seq_len)
         val_dataset = LazySequenceDataset(val_feats, val_times, val_targets, seq_len)
         
-        # DataLoaders (num_workers=0 to avoid multiprocessing clones on RunPod if unstable)
-        # Using pin_memory=False for saving RAM
-        train_loader = DataLoader(dataset, batch_size=32, shuffle=True, num_workers=0, pin_memory=False)
-        val_loader = DataLoader(val_dataset, batch_size=32, num_workers=0, pin_memory=False)
+        # DataLoaders High Performance
+        train_loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS, pin_memory=True)
+        val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True)
         
-        logger.info("DataLoaders Ready.")
+        logger.info(f"DataLoaders Ready. Batch Size: {BATCH_SIZE}, Workers: {NUM_WORKERS}")
         
         # Winning Hyperparameters form Optuna (Trial 0)
         # d_model=64, nhead=8, num_layers=3, lr=4.6e-5, dropout=0.23
@@ -303,8 +307,9 @@ def main(args):
             # For now, let's regenerate from dataset.features to be safe on types.
             masked_dataset = MaskedTimeSeriesDataset(dataset.features.numpy(), dataset.time_features.numpy(), seq_len=seq_len)
             
-            logger.info("DEBUG: PreTrain Step 2: Creating DataLoader (num_workers=0)...")
-            masked_loader = DataLoader(masked_dataset, batch_size=32, shuffle=True, num_workers=0, pin_memory=False)
+            logger.info("DEBUG: PreTrain Step 2: Creating DataLoader (High Perf)...")
+            # Use same Beast Mode constants
+            masked_loader = DataLoader(masked_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS, pin_memory=True)
             
             logger.info("DEBUG: PreTrain Step 3: Initializing PreTrainer...")
             pretrainer = PreTrainer(model)
