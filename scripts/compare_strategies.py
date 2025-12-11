@@ -7,7 +7,9 @@ import logging
 import torch
 import joblib
 from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
+import ta # Library for Technical Analysis
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -71,11 +73,16 @@ def run_comparison():
     features = np.nan_to_num(features)
     time_features = np.nan_to_num(time_features)
     
-    # Extract RSI for Ensemble Logic
-    # We need to align it with valid_df (which is sliced by seq_len later)
-    # df_val has RSI.
-    rsi_full = df_val['rsi'].values
-    rsi_full = np.nan_to_num(rsi_full, nan=50.0) # Fill nan with neutral
+    # Extract RSI for Ensemble Logic (On-the-fly calculation)
+    # val.parquet has 'close' but not 'rsi' (lost in PCA)
+    rsi_ind = ta.momentum.RSIIndicator(close=df_val["close"], window=14)
+    rsi_values = rsi_ind.rsi().fillna(50.0).values
+    
+    # Store in df_val for later usage
+    df_val['rsi'] = rsi_values # Ensure column exists for strategies
+    
+    # Also prepare for slicing
+    rsi_full = rsi_values
     
     seq_len = 10
     dataset = LazySequenceDataset(features, time_features, targets, seq_len)
