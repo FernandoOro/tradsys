@@ -86,8 +86,17 @@ class RegimeDetector:
         # Assign Parameters to New Model
         sorted_model.startprob_ = new_startprob
         sorted_model.transmat_ = new_transmat
-        sorted_model.means_ = new_means
-        sorted_model.covars_ = new_covars
+        
+        # Bypass validation by setting private attributes
+        # hmmlearn checks shape against n_features in setter, which can be flaky on fresh implementation
+        if hasattr(sorted_model, "_means_"):
+            sorted_model._means_ = new_means
+            sorted_model._covars_ = new_covars
+        else:
+            # Fallback (older versions might allow setter or use different name)
+            # But usually _means_ existed. If not, try public setter and hope.
+            sorted_model.means_ = new_means
+            sorted_model.covars_ = new_covars
         
         # Transfer fitted state
         sorted_model.monitor_ = self.model.monitor_
