@@ -34,22 +34,59 @@ class Tuner:
         lr = trial.suggest_float("lr", 1e-5, 1e-3, log=True)
         dropout = trial.suggest_float("dropout", 0.1, 0.5)
         
-        # 2. Setup Data (Simulated for this script, normally passed in)
-        # In a real run, we load `train.parquet` which is already PCA'd
-        feat_dim = 8 # PCA Reduced Dim assumption
-        N = 500
-        x_data = torch.randn(N, 10, feat_dim)
-        x_time = torch.randn(N, 10, 4)
-        y_data = torch.randn(N, 2)
+        # 2. Setup Data (Real Data)
+        train_path = config.DATA_DIR / 'processed' / 'train.parquet'
+        train_df = pd.read_parquet(train_path)
+        
+        # Determine Features (exclude target/time)
+        exclude = ['target', 'timestamp', 'open', 'high', 'low', 'close', 'volume', 
+                   'hour_sin', 'hour_cos', 'day_sin', 'day_cos']
+        feature_cols = [c for c in train_df.columns if c not in exclude]
+        # Prioritize PCA
+        pca_cols = [c for c in feature_cols if c.startswith('PC_')]
+        if pca_cols: feature_cols = pca_cols
+            
+        feat_dim = len(feature_cols)
+        
+        # Prepare Tensors (Simple Sliding Window for Tuner)
+        def create_sequences(df, feat_cols, target_col, seq_len=10):
+            data = df[feat_cols].values
+            targets = df[target_col].values
+            
+            # Time features
+            time_cols = ['hour_sin', 'hour_cos', 'day_sin', 'day_cos']
+            if all([c in df.columns for c in time_cols]):
+                 t_data = df[time_cols].values
+            else:
+                 t_data = np.zeros((len(df), 4))
+
+            xs, ts, ys = [], [], []
+            for i in range(len(df) - seq_len):
+                xs.append(data[i:i+seq_len])
+                ts.append(t_data[i:i+seq_len])
+                ys.append(targets[i+seq_len])
+            return np.array(xs), np.array(ts), np.array(ys)
+
+        X, T, Y_raw = create_sequences(train_df, feature_cols, 'target')
+        
+        # Tensors
+        x_data = torch.FloatTensor(X)
+        x_time = torch.FloatTensor(T)
+        
+        # Targets: Direction (-1/1) and Confidence (1)
+        # Y_raw is 0 or 1
+        y_dir = np.where(Y_raw > 0.5, 1.0, -1.0)
+        y_conf = np.ones_like(y_dir)
+        y_data = torch.FloatTensor(np.stack([y_dir, y_conf], axis=1))
         
         # Convert to numpy for KFold
         # (PurgedKFold expects indices)
         
         # 3. Purged Interaction
-        # We assume t1 information is available for Purging. 
-        # For this demo stub, we use t1=None (Embargo only) or mock it.
-        # Let's mock t1 (event ends)
-        t1 = pd.Series(np.arange(N) + 5, index=np.arange(N)) 
+        # We need t1 (event end times) for PurgedCV. 
+        # Assuming timestamps are sequential integers for this index
+        N = len(x_data)
+        t1 = pd.Series(np.arange(N) + 1, index=np.arange(N)) 
         
         pkf = PurgedKFold(n_splits=3, t1=t1, pct_embargo=0.01)
         
