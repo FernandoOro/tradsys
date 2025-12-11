@@ -100,8 +100,13 @@ def main(args):
             if not train_path.exists() or not test_path.exists():
                 raise FileNotFoundError(f"Processed data not found. Looked for {train_path} and {test_path}")
                 
+            print("DEBUG: Loading Train Parquet...")
             train_df = pd.read_parquet(train_path)
+            print(f"DEBUG: Train Loaded. Shape: {train_df.shape}")
+            
+            print("DEBUG: Loading Val Parquet...")
             test_df = pd.read_parquet(test_path)
+            print(f"DEBUG: Val Loaded. Shape: {test_df.shape}")
             
             # Identify Feature Columns (excluding target, date, etc.)
             # Assuming Pipeline saved features with 'target' column.
