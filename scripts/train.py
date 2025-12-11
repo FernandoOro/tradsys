@@ -1,8 +1,29 @@
-import os
+import resource
+
 # CRITICAL FIX: Prevent OpenMP Deadlock on RunPod
 os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['MKL_NUM_THREADS'] = '1'
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
+
+def print_system_limits():
+    """Diagnose invisible container limits (ulimit -v, -m)"""
+    try:
+        soft, hard = resource.getrlimit(resource.RLIMIT_AS)
+        soft_mb = soft / 1024**2 if soft != -1 else "Unlimited"
+        hard_mb = hard / 1024**2 if hard != -1 else "Unlimited"
+        print(f"DEBUG: 🛡️  RLIMIT_AS (Virtual Memory): Soft={soft_mb}, Hard={hard_mb}")
+        
+        soft, hard = resource.getrlimit(resource.RLIMIT_RSS)
+        soft_mb = soft / 1024**2 if soft != -1 else "Unlimited"
+        print(f"DEBUG: 🛡️  RLIMIT_RSS (Resident Memory): Soft={soft_mb}")
+        
+        mem = psutil.virtual_memory() if psutil else None
+        if mem:
+            print(f"DEBUG: 🧠 System RAM: Total={mem.total/1024**3:.1f}GB, Available={mem.available/1024**3:.1f}GB")
+    except Exception as e:
+        print(f"DEBUG: Could not read limits: {e}")
+
+print_system_limits()
 
 import pandas as pd
 import numpy as np
