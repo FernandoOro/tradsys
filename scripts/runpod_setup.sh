@@ -18,12 +18,33 @@ pip install -r requirements.txt
 if [ ! -f .env ]; then
     echo "⚠️ No se encontró .env. Creando uno básico..."
     cat <<EOF > .env
+# --- Exchange Secrets (Binance) ---
 EXCHANGE_ID=binance
+# Si es Paper Trading, estas keys no envían órdenes reales, pero se necesitan para leer datos
+API_KEY=tu_binance_api_key
+SECRET_KEY=tu_binance_secret_key
+
+# --- Trading Configuration ---
 SYMBOL=BTC/USDT
-TIMEFRAME=1m
+# IMPORTANTE: Cambiado a 1m para trading intradía real
+TIMEFRAME=1m  
+# ¿Es dinero real? False = Dinero Real (CUIDADO), True = Simulación
 IS_PAPER_TRADING=True
+
+# --- Risk Management (Safety Nets) ---
+MAX_RISK_PER_TRADE=0.02  # 2% de la cuenta
+MAX_LEVERAGE=1           # Spot trading (sin apalancamiento)
+STOP_LOSS_ATR_MULT=2.0   # Multiplicador de volatilidad para SL
+
+# --- Infrastructure ---
+# AWS Tokyo para mínima latencia con Binance
+AWS_REGION=ap-northeast-1 
+RUNPOD_API_KEY=tu_runpod_key
+
+# --- Logging & Monitoring ---
+# Necesario para ver las gráficas de entrenamiento
+WANDB_API_KEY=3e0049090c8b79811b6abb59b319d4ee12f58611
 LOG_LEVEL=INFO
-# Añade tus API KEYS aquí
 EOF
     echo "✅ .env creado. ¡Recuerda editarlo con tus claves!"
 fi
