@@ -151,6 +151,39 @@ def run_comparison():
         
     valid_df.loc[:, 'pred_score'] = np.array(all_dirs)
     valid_df.loc[:, 'confidence'] = np.array(all_confs)
+
+    # --- 2c. RUN AGENT 2 INFERENCE (Ensemble Support) ---
+    logger.info("Running Agent 2 (Reversion) Inference...")
+    predictor_2 = None
+    all_scores_2 = []
+    has_agent2 = False
+    
+    try:
+        predictor_2 = Predictor(model_name="agent2")
+        has_agent2 = True
+    except Exception:
+        logger.warning("Agent 2 not found. Ensemble Simulation will skip Reversion component.")
+        
+    if has_agent2:
+        # Re-use loader (it yields x, t, y). Agent 2 needs Flattened X.
+        # Predictor handles flattening internally now.
+        for batch_x, _, _ in tqdm(loader):
+            batch_x_np = batch_x.numpy()
+            try:
+                preds2 = predictor_2.predict(batch_x_np) 
+                # Output: {'score': ...} (Logits)
+                # Need to map to Probability
+                logits = preds2['score']
+                probs = 1 / (1 + np.exp(-logits)) # Sigmoid
+                all_scores_2.extend(probs)
+            except Exception as e:
+                logger.error(f"Agent 2 Error: {e}")
+                # Fill with 0.5 (Neutral)
+                all_scores_2.extend([0.5]*len(batch_x_np))
+    else:
+        all_scores_2 = [0.5] * len(valid_df)
+        
+    valid_df.loc[:, 'agent2_score'] = np.array(all_scores_2)
     
     # Auditor Prediction
     # p_side = sign(pred_score)
@@ -203,6 +236,37 @@ def run_comparison():
     
     pf3, m3 = sim.run_backtest(s3['close'], s3['signal'])
     stats_list.append({"Name": "Reckless (No Audit)", "Ret %": m3['Total Return [%]'], "Sharpe": m3['Sharpe Ratio'], "Trades": m3['Total Trades'], "Win Rate": m3['Win Rate [%]']})
+
+    # D. ENSEMBLE (Holy Grail)
+    # Regime 0 -> Agent 2 (Threshold 0.70)
+    # Regime 1/2 -> Agent 1 (Audited, Threshold 0.75)
+    s4 = valid_df.copy()
+    
+    # Logic:
+    # 1. Trend Signal: (Score > 0.75) AND (Regime != 0) AND (Auditor OK)
+    cond_trend_buy = (s4['pred_score'] > 0.75) & (s4['regime'] != 0) & (s4['auditor_approved'] == True)
+    
+    # 2. Reversion Signal: (Agent2 > 0.70) AND (Regime == 0)
+    # Note: Agent 2 predicts 'Up', so > 0.70 is Buy. < 0.30 is Sell? 
+    # For now, let's implement Long Only for Reversion too.
+    cond_mean_buy = (s4['agent2_score'] > 0.70) & (s4['regime'] == 0)
+    
+    # Combined Entry
+    cond_entry = cond_trend_buy | cond_mean_buy
+    
+    # Exit: 
+    # Trend Exit: Score < 0
+    # Mean Exit: Agent2 < 0.5? Or Standard Stop Loss?
+    # Simulator handles SL/TP. We just send Exit Signal (-1).
+    # Let's say we exit if Trend Score flips negative. 
+    # Does Agent 2 have an exit signal? 
+    # If Agent 2 Score drops below 0.5, probability of Up matches Down.
+    cond_exit = (s4['pred_score'] < 0.0) # Dominant Trend Exit
+    
+    s4['signal'] = np.select([cond_entry, cond_exit], [1, -1], 0)
+    
+    pf4, m4 = sim.run_backtest(s4['close'], s4['signal'])
+    stats_list.append({"Name": "ENSEMBLE (Final)", "Ret %": m4['Total Return [%]'], "Sharpe": m4['Sharpe Ratio'], "Trades": m4['Total Trades'], "Win Rate": m4['Win Rate [%]']})
     
     # --- 6. REPORT ---
     results = pd.DataFrame(stats_list)
