@@ -71,6 +71,12 @@ def run_comparison():
     features = np.nan_to_num(features)
     time_features = np.nan_to_num(time_features)
     
+    # Extract RSI for Ensemble Logic
+    # We need to align it with valid_df (which is sliced by seq_len later)
+    # df_val has RSI.
+    rsi_full = df_val['rsi'].values
+    rsi_full = np.nan_to_num(rsi_full, nan=50.0) # Fill nan with neutral
+    
     seq_len = 10
     dataset = LazySequenceDataset(features, time_features, targets, seq_len)
     loader = DataLoader(dataset, batch_size=4096, shuffle=False, num_workers=4)
@@ -140,6 +146,10 @@ def run_comparison():
     # --- 2b. RE-RUN INFERENCE WITH CONFIDENCE ---
     all_dirs = []
     all_confs = []
+    
+    # Store RSI for valid set
+    valid_rsi = rsi_full[seq_len:]
+    valid_df.loc[:, 'rsi'] = valid_rsi
     
     logger.info("Running Inference (Dir + Conf)...")
     for batch_x, batch_t, _ in tqdm(loader):
@@ -246,9 +256,9 @@ def run_comparison():
     # 1. Trend Signal: (Score > 0.75) AND (Regime != 0) AND (Auditor OK)
     cond_trend_buy = (s4['pred_score'] > 0.75) & (s4['regime'] != 0) & (s4['auditor_approved'] == True)
     
-    # 2. Reversion Signal: (Agent2 > 0.80) AND (Regime == 0)
-    # Raised threshold to 0.80 to reduce noise
-    cond_mean_buy = (s4['agent2_score'] > 0.80) & (s4['regime'] == 0)
+    # 2. Reversion Signal: (Agent2 > 0.80) AND (Regime == 0) AND (RSI < 30)
+    # Only buy "Oversold" in Range.
+    cond_mean_buy = (s4['agent2_score'] > 0.80) & (s4['regime'] == 0) & (s4['rsi'] < 30)
     
     # Combined Entry
     cond_entry = cond_trend_buy | cond_mean_buy
@@ -257,10 +267,9 @@ def run_comparison():
     # Trend Exit: Score < 0
     cond_trend_exit = (s4['pred_score'] < 0.0)
     
-    # Mean Reversion Exit: Score < 0.5 (Confidence Lost)
-    # If the probability drops below neutral, we exit.
-    # Also if Regime changes out of 0? Maybe. But let's stick to score.
-    cond_mean_exit = (s4['agent2_score'] < 0.5)
+    # Mean Reversion Exit: Score < 0.5 OR RSI > 50 (Reverted)
+    # If RSI > 50, we have reverted to mean. Take profit.
+    cond_mean_exit = (s4['agent2_score'] < 0.5) | (s4['rsi'] > 50)
     
     # Combined Exit
     cond_exit = cond_trend_exit | cond_mean_exit
