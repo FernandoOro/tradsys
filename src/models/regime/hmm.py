@@ -68,41 +68,17 @@ class RegimeDetector:
         new_means = np.array(self.model.means_[sorted_idx])
         new_covars = np.array(self.model.covars_[sorted_idx])
         
-        # Create a fresh model to hold sorted parameters
-        # This prevents validation errors from partial updates on existing model
-        sorted_model = GaussianHMM(n_components=self.n_components, 
-                                   covariance_type=self.model.covariance_type, 
-                                   n_iter=self.model.n_iter)
-        
-        # Manually set n_features (Critical for validation)
-        # Try to get from n_features (newer) or infer from means shape
-        if hasattr(self.model, "n_features"):
-            sorted_model.n_features = self.model.n_features
-        else:
-            sorted_model.n_features = self.model.means_.shape[1]
-            
-        logger.info(f"Re-initializing HMM with n_features={sorted_model.n_features}")
-        
-        # Assign Parameters to New Model
-        sorted_model.startprob_ = new_startprob
-        sorted_model.transmat_ = new_transmat
-        
-        # Bypass validation by setting private attributes
-        # hmmlearn checks shape against n_features in setter, which can be flaky on fresh implementation
-        if hasattr(sorted_model, "_means_"):
-            sorted_model._means_ = new_means
-            sorted_model._covars_ = new_covars
-        else:
-            # Fallback (older versions might allow setter or use different name)
-            # But usually _means_ existed. If not, try public setter and hope.
-            sorted_model.means_ = new_means
-            sorted_model.covars_ = new_covars
-        
-        # Transfer fitted state
-        sorted_model.monitor_ = self.model.monitor_
-        
-        # Replace
-        self.model = sorted_model
+        # Atomic Assignment using In-Place Update ([:] syntax)
+        # This bypasses property setters and validation logic by modifying the arrays directly.
+        # self.model is already fitted/initialized, so shapes are correct.
+        try:
+            self.model.startprob_[:] = new_startprob
+            self.model.transmat_[:] = new_transmat
+            self.model.means_[:] = new_means
+            self.model.covars_[:] = new_covars
+        except Exception as e:
+            logger.error(f"Failed to sort HMM states in-place: {e}")
+            raise e
         
         # Analyze states (After Sort)
         for i in range(self.n_components):
