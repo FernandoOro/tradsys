@@ -1,13 +1,11 @@
+import pandas as pd
+import numpy as np
 import os
 import sys
 import argparse
 import logging
 import requests
 import torch
-import traceback
-import torch.onnx
-import pandas as pd
-import numpy as np
 from torch.utils.data import DataLoader, TensorDataset
 
 # Add project root to path
