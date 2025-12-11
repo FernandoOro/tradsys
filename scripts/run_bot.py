@@ -24,6 +24,7 @@ from src.execution.router import SmartRouter
 from src.models.ensemble.meta_labeling import MetaAuditor
 from src.models.regime.hmm import RegimeDetector
 from src.database.storage import StorageEngine
+from src.execution.strategies import StrategyFactory
 
 # Configure Logging
 logging.basicConfig(
@@ -73,6 +74,10 @@ class TradingBot:
         
         self.seq_len = 10
         self.feat_dim = self.pca.pca.n_components_
+        
+        # Load Strategy
+        self.strategy = StrategyFactory.get_strategy()
+        logger.info(f"Loaded Strategy Profile: {self.strategy.name}")
         
     def run_cycle(self):
         symbol = config.SYMBOL
@@ -128,49 +133,15 @@ class TradingBot:
              regime = self.regime_detector.predict_state(df) 
              logger.info(f"Market Regime: {regime}")
              
-             # HMM FILTER: Block State 0 (Low Vol/Range/Bearish)
-             if regime == 0:
-                 logger.warning("🚫 HMM REGIME 0 DETECTED (Range/Bear). Strategy Paused.")
-                 return # SKIP CYCLE
-                 
-        except Exception as e:
-             logger.warning(f"Regime Check failed: {e}")
-        
-        # PREDICT
-        pred = self.predictor.predict(x_val, t_val)
-        direction = pred['direction'][0]
-        confidence = pred['confidence'][0]
-        side_sign = np.sign(direction)
-        
-        current_price = df['close'].iloc[-1]
-        current_atr = df['atr'].iloc[-1]
-        
-        logger.info(f"Alpha: Dir={direction:.2f}, Conf={confidence:.2f}")
-
-        # SNIPER THRESHOLD (Optimized via Comparative Backtest)
-        # 0.75 allows more trades, while Auditor filters bad ones.
-        if confidence < 0.75:
-             logger.info(f"💤 Low Confidence ({confidence:.2f} < 0.75). Skipping.")
-             return
-
-        # META-AUDIT
-        # Feature names must match Training (f0, f1...)
-        feat_vals = x_val[0][-1:] # Last step features
-        col_names = [f'f{i}' for i in range(feat_vals.shape[1])]
-        meta_df = pd.DataFrame(feat_vals, columns=col_names)
-        veto_decision = self.auditor.predict_veto(meta_df, pd.Series([confidence]), pd.Series([side_sign]))
-        is_vetoed = not veto_decision[0]
-        
-        self.storage.store_signal(
-            symbol=symbol,
-            direction=float(direction),
+        # DECISION CORE (Strategy Pattern)
+        should_execute = self.strategy.should_trade(
             confidence=float(confidence),
-            features={"price": current_price, "atr": current_atr},
-            vetoed=is_vetoed
+            regime=int(regime),
+            auditor_vetoed=is_vetoed
         )
-
-        if is_vetoed:
-            logger.warning("🚫 AUDITOR VETOED.")
+        
+        if not should_execute:
+            logger.info(f"🛑 Trade Rejected by {self.strategy.name} strategy.")
             return
 
         # EXECUTION

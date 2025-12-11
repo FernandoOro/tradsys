@@ -41,6 +41,7 @@ class Config:
 
     # Feature Flags
     IS_PAPER_TRADING = os.getenv("IS_PAPER_TRADING", "True").lower() == "true" # New
+    STRATEGY_PROFILE = os.getenv("STRATEGY_PROFILE", "AUDITED").upper() # SNIPER, AUDITED, RECKLESS
 
     # Risk Management
     MAX_RISK_PER_TRADE = float(os.getenv("MAX_RISK_PER_TRADE", "0.02")) # New
