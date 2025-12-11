@@ -12,7 +12,7 @@ class AdversarialValidator:
     Performs Adversarial Validation to detect Covariate Shift between Train and Test sets.
     """
     def __init__(self):
-        self.model = RandomForestClassifier(n_estimators=50, max_depth=5, random_state=42)
+        self.model = RandomForestClassifier(n_estimators=50, max_depth=5, random_state=42, n_jobs=1)
         
     def check_drift(self, train_df: pd.DataFrame, test_df: pd.DataFrame, features: list = None) -> float:
         """
