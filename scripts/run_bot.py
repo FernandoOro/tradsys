@@ -57,7 +57,9 @@ class TradingBot:
         self.event_filter = EventFilter() 
         self.predictor = Predictor(model_name="agent1")
         self.auditor = MetaAuditor("auditor_v1")
-        self.regime_detector = RegimeDetector("hmm_model")
+        # Correctly initialize and force load
+        self.regime_detector = RegimeDetector(n_components=3)
+        self.regime_detector.load_model() # Loads from hmm_regime.pkl
         
         self.risk_manager = RiskManager()
         
@@ -120,13 +122,17 @@ class TradingBot:
         t_val = np.expand_dims(t_val, 0)
         
         # REGIME CHECK (Connected)
-        # We need features for HMM. Use pct_change of close
+        regime = -1
         try:
              # Pass the full DF for HMM to feature engineering
              regime = self.regime_detector.predict_state(df) 
              logger.info(f"Market Regime: {regime}")
-             # Hard Rule: If Regime 2 (Assume Panic/High Vol for this demo), reduce size or block
-             # For now, we just log it as a connected component
+             
+             # HMM FILTER: Block State 0 (Low Vol/Range/Bearish)
+             if regime == 0:
+                 logger.warning("🚫 HMM REGIME 0 DETECTED (Range/Bear). Strategy Paused.")
+                 return # SKIP CYCLE
+                 
         except Exception as e:
              logger.warning(f"Regime Check failed: {e}")
         
@@ -140,6 +146,11 @@ class TradingBot:
         current_atr = df['atr'].iloc[-1]
         
         logger.info(f"Alpha: Dir={direction:.2f}, Conf={confidence:.2f}")
+
+        # SNIPER THRESHOLD (Winning Backtest Logic)
+        if confidence < 0.95:
+             logger.info(f"💤 Low Confidence ({confidence:.2f} < 0.95). Skipping.")
+             return
 
         # META-AUDIT
         # Feature names must match Training (f0, f1...)
