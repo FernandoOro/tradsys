@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from src.models.agents.transformer import TransformerAgent
 from src.training.trainer import Trainer
 from src.model_selection.cv import PurgedKFold
+from src.config import config
 
 logger = logging.getLogger(__name__)
 

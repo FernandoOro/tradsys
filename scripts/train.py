@@ -261,9 +261,10 @@ def main(args):
         
         logger.info(f"DataLoaders Ready. Batch Size: {BATCH_SIZE}, Workers: {NUM_WORKERS}")
         
-        # Winning Hyperparameters form Optuna (Trial 0)
-        # d_model=64, nhead=8, num_layers=3, lr=4.6e-5, dropout=0.23
-        model = TransformerAgent(input_dim=feat_dim, d_model=64, nhead=8, num_layers=3, dropout=0.23)
+        # Winning Hyperparameters form Optuna (Trial 0) or CLI Args
+        # Default: d_model=64, nhead=8, num_layers=3, lr=4.6e-5, dropout=0.23
+        logger.info(f"Model Config: d_model={args.d_model}, nhead={args.nhead}, layers={args.layers}, dropout={args.dropout}")
+        model = TransformerAgent(input_dim=feat_dim, d_model=args.d_model, nhead=args.nhead, num_layers=args.layers, dropout=args.dropout)
         
         # 4. PRE-TRAINING (Self-Supervised)
         if args.pretrain:
@@ -332,8 +333,9 @@ def main(args):
         logger.info("=== Phase 3: Supervised Fine-Tuning ===")
         log_memory("Before Training")
         
-        # Updated LR from optimization (Trial 0)
-        trainer = Trainer(model, lr=4.6e-5)
+        # Updated LR from optimization
+        logger.info(f"Using Learning Rate: {args.lr}")
+        trainer = Trainer(model, lr=args.lr)
         trainer.train(train_loader, val_loader, epochs=args.epochs)
         
         # 6. META-LABELING (The Auditor)
@@ -391,6 +393,14 @@ if __name__ == "__main__":
     parser.add_argument("--autokill", action="store_true", help="Enable RunPod Auto-Kill Switch")
     parser.add_argument("--pretrain", action="store_true", help="Deep Pre-Training")
     parser.add_argument("--no-adv-val", action="store_true", help="Skip Adversarial Validation (Debug)")
+    
+    # Hyperparameters
+    parser.add_argument("--lr", type=float, default=4.6e-5, help="Learning Rate")
+    parser.add_argument("--d_model", type=int, default=64, help="Model Dimension")
+    parser.add_argument("--nhead", type=int, default=8, help="Attention Heads")
+    parser.add_argument("--layers", type=int, default=3, help="Transformer Layers")
+    parser.add_argument("--dropout", type=float, default=0.23, help="Dropout")
+    
     args = parser.parse_args()
     
     main(args)
