@@ -10,9 +10,11 @@ echo "✅ PYTHONPATH configurado: $PYTHONPATH"
 echo "📥 Bajando últimos cambios de Git..."
 git pull
 
-# 3. Instalar Dependencias (Solo si falta alguna)
+# 3. Instalar Dependencias (Forzando reparación)
 echo "📦 Verificando librerías..."
-pip install -r requirements.txt
+# Fix para el error de sklearn 'metadata_routing' y 'ccxt' no encontrado
+pip uninstall -y scikit-learn
+pip install --upgrade --force-reinstall scikit-learn ccxt -r requirements.txt
 
 # 4. Crear .env si no existe (Plantilla básica)
 if [ ! -f .env ]; then
