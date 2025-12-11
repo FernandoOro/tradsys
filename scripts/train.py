@@ -1,3 +1,4 @@
+import os
 import resource
 
 # CRITICAL FIX: Prevent OpenMP Deadlock on RunPod
