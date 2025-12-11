@@ -203,7 +203,15 @@ def main(args):
             logger.info(f"Sequences Created! shape={X.shape}, ram={X.nbytes / 1024**2:.1f}MB")
             
             # FORCE COPY to ensure memory is contiguous for PyTorch
-            return np.ascontiguousarray(X), np.ascontiguousarray(T), np.ascontiguousarray(Y)
+            logger.info("Copying to contiguous memory (X)...")
+            X_cont = np.ascontiguousarray(X)
+            logger.info("Copying to contiguous memory (T)...")
+            T_cont = np.ascontiguousarray(T)
+            logger.info("Copying to contiguous memory (Y)...")
+            Y_cont = np.ascontiguousarray(Y)
+            
+            logger.info("Sequence creation complete.")
+            return X_cont, T_cont, Y_cont
             
         logger.info("Creating Sequences (Train)...")
         X_train, T_train, Y_train_raw = create_sequences(train_df, feature_cols, 'target', seq_len)
