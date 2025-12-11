@@ -62,6 +62,12 @@ class RegimeDetector:
         sorted_idx = np.argsort(state_vol_means)
         logger.info(f"Sorting States by Volatility: {sorted_idx}")
         
+        # Prepare Reordered Parameters (Copying to avoid view issues)
+        new_startprob = np.array(self.model.startprob_[sorted_idx])
+        new_transmat = np.array(self.model.transmat_[sorted_idx, :][:, sorted_idx])
+        new_means = np.array(self.model.means_[sorted_idx])
+        new_covars = np.array(self.model.covars_[sorted_idx])
+        
         # Create a fresh model to hold sorted parameters
         # This prevents validation errors from partial updates on existing model
         sorted_model = GaussianHMM(n_components=self.n_components, 
