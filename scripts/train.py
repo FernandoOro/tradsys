@@ -1,5 +1,9 @@
 import os
 import resource
+try:
+    import psutil
+except ImportError:
+    psutil = None
 
 # CRITICAL FIX: Prevent OpenMP Deadlock on RunPod
 os.environ['OMP_NUM_THREADS'] = '1'
