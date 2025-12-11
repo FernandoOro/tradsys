@@ -14,6 +14,7 @@ streamlit
 plotly
 sqlalchemy
 wandb
+optuna
 onnxruntime
 onnx
 onnxscript
