@@ -166,31 +166,39 @@ def main(args):
             data = df[feat_cols].values
             targets = df[target_col].values
             
-            xs, ts, ys = [], [], []
-            # We need Mock time inputs if not present (Cycle encoding)
-            # Assuming pipeline didn't save time embeddings? 
-            # If pipeline saved 'hour_sin', etc., we use them.
-            # Let's check typical time cols: ['hour_sin', 'hour_cos', 'day_sin', 'day_cos']
+            # Extract time data to numpy ONCE (Critical Optimization)
             time_cols = ['hour_sin', 'hour_cos', 'day_sin', 'day_cos']
             has_time = all([c in df.columns for c in time_cols])
             
-            for i in range(len(df) - seq_len):
+            if has_time:
+                time_data = df[time_cols].values
+            else:
+                logger.warning("Time columns missing. Using random noise for time.")
+                time_data = np.random.randn(len(df), 4)
+
+            xs, ts, ys = [], [], []
+            
+            length = len(df) - seq_len
+            logger.info(f"Processing {length} sequences (Optimized)...")
+            
+            for i in range(length):
+                # Pure Numpy Slicing (Instantly fast)
                 x = data[i:i+seq_len]
-                y = targets[i+seq_len] # Target at next step
-                
-                if has_time:
-                    t = df[time_cols].iloc[i:i+seq_len].values
-                else:
-                    t = np.random.randn(seq_len, 4) # Fallback if time features missing
+                y = targets[i+seq_len]
+                t = time_data[i:i+seq_len]
                 
                 xs.append(x)
                 ys.append(y)
                 ts.append(t)
                 
+                if i % 10000 == 0 and i > 0:
+                    print(f"DEBUG: Processed {i}/{length} sequences...")
+                
             return np.array(xs), np.array(ts), np.array(ys)
             
-        logger.info("Creating Sequences...")
+        logger.info("Creating Sequences (Train)...")
         X_train, T_train, Y_train_raw = create_sequences(train_df, feature_cols, 'target', seq_len)
+        logger.info("Creating Sequences (Val)...")
         X_test, T_test, Y_test_raw = create_sequences(test_df, feature_cols, 'target', seq_len)
         
         # Convert Y to Classification (One-Hot or Labels?)
