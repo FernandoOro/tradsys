@@ -62,25 +62,32 @@ class RegimeDetector:
         sorted_idx = np.argsort(state_vol_means)
         logger.info(f"Sorting States by Volatility: {sorted_idx}")
         
-        # Prepare Reordered Parameters (Copying to avoid view issues)
-        new_startprob = np.array(self.model.startprob_[sorted_idx])
-        new_transmat = np.array(self.model.transmat_[sorted_idx, :][:, sorted_idx])
-        new_means = np.array(self.model.means_[sorted_idx])
-        new_covars = np.array(self.model.covars_[sorted_idx])
+        # Create a fresh model to hold sorted parameters
+        # This prevents validation errors from partial updates on existing model
+        sorted_model = GaussianHMM(n_components=self.n_components, 
+                                   covariance_type=self.model.covariance_type, 
+                                   n_iter=self.model.n_iter)
         
-        # Atomic Assignment (Bypassing Setters to avoid validation glitch)
-        self.model.startprob_ = new_startprob
-        self.model.transmat_ = new_transmat
-        
-        # hmmlearn 0.2.8+ uses properties for means/covars
-        # We set private attributes directly to avoid 'ValueError' during sort
-        if hasattr(self.model, "_means_"):
-            self.model._means_ = new_means
-            self.model._covars_ = new_covars
+        # Manually set n_features (Critical for validation)
+        # Try to get from n_features (newer) or infer from means shape
+        if hasattr(self.model, "n_features"):
+            sorted_model.n_features = self.model.n_features
         else:
-            # Fallback for older versions
-            self.model.means_ = new_means
-            self.model.covars_ = new_covars
+            sorted_model.n_features = self.model.means_.shape[1]
+            
+        logger.info(f"Re-initializing HMM with n_features={sorted_model.n_features}")
+        
+        # Assign Parameters to New Model
+        sorted_model.startprob_ = new_startprob
+        sorted_model.transmat_ = new_transmat
+        sorted_model.means_ = new_means
+        sorted_model.covars_ = new_covars
+        
+        # Transfer fitted state
+        sorted_model.monitor_ = self.model.monitor_
+        
+        # Replace
+        self.model = sorted_model
         
         # Analyze states (After Sort)
         for i in range(self.n_components):
