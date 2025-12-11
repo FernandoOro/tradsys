@@ -204,18 +204,13 @@ def main(args):
         val_dataset = TensorDataset(torch.FloatTensor(X_test), torch.FloatTensor(T_test), torch.FloatTensor(np.stack([np.where(Y_test_raw>0.5, 1.0, -1.0), np.ones_like(Y_test_raw)], axis=1)))
         val_loader = DataLoader(val_dataset, batch_size=32)
         
-        model = TransformerAgent(input_dim=feat_dim, d_model=64)
+        # Winning Hyperparameters form Optuna (Trial 3)
+        # d_model=32, nhead=4, num_layers=2, lr=1.15e-4, dropout=0.26
+        model = TransformerAgent(input_dim=feat_dim, d_model=32, nhead=4, num_layers=2, dropout=0.26)
         
         # 4. PRE-TRAINING (Self-Supervised)
         if args.pretrain:
             logger.info("=== Phase 9: Self-Supervised Pre-Training ===")
-            # MaskedTimeSeriesDataset expects 2D continuous data?
-            # Actually we just updated MaskedDataset logic in previous turns?
-            # Let's stick to what worked: passing the raw 2D and letting Dataset window it if possible, 
-            # OR if we already have windowed X_train, we can adapt.
-            # MaskedTimeSeriesDataset takes (N, F).
-            # We have train_df[feature_cols].values which is (N, F).
-            # Perfect.
             raw_2d = train_df[feature_cols].values
             
             # Time features
@@ -232,7 +227,8 @@ def main(args):
             
         # 5. SUPERVISED TRAINING (Fine-Tuning)
         logger.info("=== Phase 3: Supervised Fine-Tuning ===")
-        trainer = Trainer(model, lr=1e-4)
+        # Updated LR from optimization
+        trainer = Trainer(model, lr=1.15e-4)
         trainer.train(train_loader, val_loader, epochs=args.epochs)
         
         # 6. META-LABELING (The Auditor)
