@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  # Servicio principal del Bot
+  smart-spot-bot:
+    build: .
+    image: smart-spot-trading:latest
+    container_name: smart_spot_bot
+    restart: unless-stopped
+    # Cargar variables de entorno secretas
+    env_file:
+      - .env
+    # Montar volúmenes para persistencia y desarrollo
+    volumes:
+      - ./src:/app/src              # Hot-reloading de código
+      - ./data:/app/data            # Persistencia de datos parquet
+      - ./models:/app/models        # Persistencia de modelos entrenados
+      - ./logs:/app/logs            # Logs accesibles desde fuera
+      - ./trade_history.db:/app/trade_history.db # Base de datos SQLite
+    # Configuración de GPU (Solo necesaria si tienes GPU Nvidia local)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    # Comandos opcionales (descomentar según necesidad)
+    # command: python scripts/run_training.py  # Para entrenar
+    command: python scripts/run_bot.py --mode paper # Para operar/simular
+
+  # (Opcional) Dashboard de Streamlit para ver métricas
+  dashboard:
+    build: .
+    command: streamlit run src/dashboard/app.py --server.port 8501
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./src:/app/src
+      - ./trade_history.db:/app/trade_history.db:ro # Read-Only por seguridad
+    env_file:
+      - .env
+    depends_on:
+      - smart-spot-bot

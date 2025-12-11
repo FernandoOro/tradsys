@@ -1,0 +1,346 @@
+Contexto del Proyecto: Sistema de Trading Algorítmico "Smart Spot"
+
+1. Visión y Objetivo
+
+Construir una "Alpha Factory" de trading intraday institucional utilizando Ensemble Learning (Mezcla de Expertos).
+El sistema debe ser económicamente viable para un retail trader (RunPod + VPS barato) y extensible, permitiendo la adición modular de nuevos agentes en el futuro sin reescribir el núcleo.
+
+2. Restricciones Críticas (Non-Negotiables)
+
+A. Infraestructura y Costos
+
+Entrenamiento: Se realiza en RunPod/Vast.ai (GPUs RTX 3090/4090).
+
+Auto-Kill Switch: Todo script de entrenamiento DEBE terminar con una llamada a la API del proveedor para destruir la instancia automáticamente.
+
+Optimización de Inicio: Usar Docker Image pre-construida para evitar tiempos de instalación (pip install) que consumen saldo.
+
+Inferencia: El modelo final debe ser exportable a ONNX para correr en un VPS de 1 vCPU (<50MB RAM).
+
+B. Arquitectura de Software
+
+Deep Learning Framework: PyTorch Nativo.
+
+⛔ PROHIBIDO: Usar transformers de HuggingFace para datos numéricos.
+
+✅ MANDATORIO: Usar torch.nn.TransformerEncoder nativo.
+
+⚠️ EXCEPCIÓN NLP: Se permite HuggingFace SOLO para agentes de sentimiento futuros, pero deben exportarse a ONNX cuantizado (INT8).
+
+Seguridad: Zero Trust. Las claves API se inyectan EXCLUSIVAMENTE vía variables de entorno.
+
+C. Alcance del Universo (Scope)
+
+Activos: Inicialmente optimizado para pares de alta liquidez: BTC/USDT y ETH/USDT.
+
+Limitación: No operar "Shitcoins" de baja capitalización para evitar manipulación y slippage masivo.
+
+3. Arquitectura del Modelo: "The Ensemble"
+
+A. Protocolo de Extensibilidad (BaseAgent)
+
+Para permitir futuros agentes, todos deben heredar de una clase base y retornar:
+
+Output Vector: [Signal_Direction (-1 a 1), Confidence (0 a 1)].
+
+Agnosticismo: El Orquestador acepta una lista dinámica de N agentes.
+
+B. Catálogo de Agentes Iniciales
+
+Agente 1: Trend Follower (Tendencia)
+
+Tipo: Transformer Encoder (Time Series).
+
+Config: d_model=64, nhead=4, num_layers=2.
+
+Input: Ventana de precios + Time Embeddings + Cross-Asset Features.
+
+Salida (Multi-Task): Main (Clasificación), Aux (High/Low Regresión).
+
+Loss Function: Focal Loss.
+
+Agente 2: Mean Reversion (Reversión)
+
+Tipo: ResNet-MLP (Red Densa Residual).
+
+Input: Indicadores estacionarios (RSI, Z-Score).
+
+Salida: Regresión (Retorno esperado).
+
+Loss Function: HuberLoss.
+
+Agente 3: Volatility Prophet (Riesgo)
+
+Tipo: TCN (Temporal Convolutional Network).
+
+Objetivo: Predecir Next Day ATR para gestión de riesgo.
+
+C. Orquestador: Gating Network & HRP
+
+Tipo: Attention Mechanism alimentado por HMM State.
+
+Lógica de Pesos: No usar suma simple. Implementar HRP (Hierarchical Risk Parity) online.
+
+D. Meta-Labeling (AVANZADO)
+
+Modelo Secundario (XGBoost): Filtra los falsos positivos del Ensemble.
+
+Target: Predecir si el Ensemble acertará (1) o fallará (0).
+
+E. Advanced Training Strategy: Self-Supervised Learning
+
+Pre-Training: Masked Modeling para aprender estructura de mercado.
+
+Fine-Tuning: Triple Barrier Labels.
+
+F. Market Regime Detection (HMM)
+
+Clasificar mercado en 3 estados (Ranging, Trending, Panic) antes de operar.
+
+4. Ingeniería de Datos y Normalización
+
+A. Rolling Window Z-Score (CRÍTICO)
+
+Normalización dinámica por ventana: $X_{norm} = \frac{X - \mu_{window}}{\sigma_{window} + \epsilon}$
+
+B. Purged K-Fold Cross Validation
+
+Uso de "Embargo" entre train/val para evitar fugas de información.
+
+C. Integridad y Formato
+
+Formato: Apache Parquet (.parquet).
+
+Validación de Datos: No Gaps > 1 vela, No NaNs.
+
+D. Fuentes y Transporte
+
+Proveedor Principal: Binance (vía ccxt).
+
+Transporte: Local -> S3/Drive -> RunPod.
+
+E. Simulación Realista (Friction Modeling)
+
+Fees: 0.1%.
+
+Slippage: 0.05% inicial.
+
+F. Estandarización Temporal
+
+Timezone: UTC.
+
+Timestamps: Unix ms.
+
+G. Feature Engineering Avanzado: Cyclical Time
+
+Hour_Sin/Cos y Day_Sin/Cos.
+
+H. Sanitización y Detección de Anomalías
+
+Filtros de velocidad y volumen.
+
+I. Advanced Labeling: Triple Barrier Method
+
+Etiquetado basado en Take Profit / Stop Loss / Tiempo límite.
+
+J. Fractional Differencing
+
+Usar FFD para preservar memoria.
+
+K. Feature Orthogonalization
+
+Aplicar PCA para descorrelacionar inputs.
+
+L. Noise Injection
+
+Ruido Gaussiano para robustez.
+
+M. Cross-Asset Features
+
+Incluir BTC.D, ETH/USDT, S&P500.
+
+5. Lógica de Ejecución y Gestión de Riesgo (SMART RISK)
+
+A. Dynamic Position Sizing
+
+$$Size = \frac{AccountEquity \times TargetRisk}{PredictedATR \times CalibratedConfidence}$$
+
+B. Límites de Seguridad (Hard Rules)
+
+Criterio de Kelly Fraccional: Max Risk por trade = 2%. Max Leverage = 3x.
+
+Cooldown: Espera de 3 velas.
+
+C. Fail-Safe (Dead Man's Switch)
+
+Circuit Breaker: PnL diario < -3% -> Apagado 24h.
+
+D. Inicialización y Warm-Up
+
+Pre-cálculo de indicadores con descarga histórica.
+
+E. Gestión de API y Rate Limits
+
+Token Bucket y Exponential Backoff.
+
+F. Modos de Operación
+
+Live / Paper / Shadow.
+
+G. Persistencia de Estado y Reconciliación
+
+SQLite WAL + Reconciliación al inicio.
+
+H. Smart Execution Router
+
+Maker (Limit) -> Wait -> Taker (Market).
+
+I. Latency & Stale Data Guard
+
+Descartar ticks con Lag > 500ms.
+
+J. Exchange Compliance & Precision
+
+Rounding de Precio y Cantidad. Min Notional.
+
+K. Order Recovery
+
+Auto-retry con reducción de tamaño.
+
+L. Monitor de Salud del Exchange
+
+Verificar systemStatus.
+
+M. TCA Feedback Loop
+
+Ajuste automático de slippage estimado.
+
+N. Idempotencia Transaccional
+
+UUIDs en newClientOrderId.
+
+O. Server-Side Safety Nets
+
+Órdenes OCO o Stop Loss inmediatos.
+
+P. Macro-Event Awareness (Calendar Filter)
+
+Bloqueo 15 min antes/después de eventos de alto impacto (CPI, FOMC).
+
+Q. Geo-Fencing & IP Guard
+
+Check de IP al inicio para evitar bloqueos por jurisdicción.
+
+R. Network Topology & Colocation (NUEVO & CRÍTICO)
+
+Requisito: El VPS de inferencia debe estar en la misma región AWS que el Exchange (usualmente AWS Tokyo ap-northeast-1 para Binance).
+
+Objetivo: Reducir latencia de red de 200ms a <20ms para minimizar slippage.
+
+6. Flujo de Trabajo (Pipeline)
+
+Local (Preparación):
+
+Descarga datos UTC.
+
+HMM Training.
+
+Data Split: Train / Val / Vault.
+
+Fractional Diff Check.
+
+Construye Docker Image.
+
+RunPod (GPU):
+
+Inicia Docker. Descarga datos.
+
+Pre-Training (SSL).
+
+Sample Weighting & Noise Injection.
+
+Optuna: Optimiza Agentes y HRP weights.
+
+Training Dynamics: Gradient Accumulation + Cosine Annealing + SWA.
+
+Calibration: Temperature Scaling.
+
+Final Exam: Evalúa contra Vault.
+
+Export: ONNX.
+
+TERMINATE POD.
+
+VPS (CPU) - Deployment:
+
+Update Policy: Safe Handover.
+
+Drift Monitor.
+
+Resource Guard.
+
+Weekly Maintenance (NUEVO): Cronjob domingo 00:00 UTC -> VACUUM de SQLite y purga de logs > 30 días.
+
+E. Data Lineage & Reproducibility
+
+Hash del dataset en metadatos del modelo.
+
+7. Stack Tecnológico Sugerido
+
+Lenguaje: Python 3.10+
+
+Async Core: asyncio.
+
+Container: Docker.
+
+Core: PyTorch, NumPy, Pandas, hmmlearn.
+
+Inferencia: ONNX Runtime.
+
+Datos: ccxt, pyarrow, vectorbt, statsmodels.
+
+Persistencia: sqlite3 + SQLAlchemy.
+
+Observabilidad (NUEVO): Streamlit (Dashboard protegido con password) + Cloudflare Tunnel (Acceso remoto seguro sin abrir puertos).
+
+Logging: loguru, Discord Webhook.
+
+Seguridad: python-dotenv.
+
+8. Quality Assurance (QA) & Testing
+
+Antes de cualquier despliegue:
+
+Unit Tests Matemáticos.
+
+Mock Exchange Tests.
+
+Data Leakage Test.
+
+Adversarial Validation.
+
+9. Confiabilidad y Explicabilidad
+
+A. Calibración de Probabilidad
+
+Temperature Scaling.
+
+B. Walk-Forward Analysis
+
+Validación deslizante.
+
+C. Shadow Mode
+
+48h de operación silenciosa.
+
+10. Operaciones de Emergencia (Panic Protocol)
+
+A. Script de Liquidación (panic.py)
+
+Cancelar órdenes.
+
+Cerrar posiciones.
+
+Notificar.
+
+Kill Process.

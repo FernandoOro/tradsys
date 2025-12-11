@@ -1,0 +1,67 @@
+--- Python ---
+
+pycache/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+
+--- Environment Variables (CRITICAL) ---
+
+.env
+.env.local
+.env.*
+
+--- Data & Models (Local Storage) ---
+
+data/raw/*
+data/processed/*
+data/vault/*
+!data/**/.gitkeep
+.parquet
+.csv
+models/.onnx
+models/.pth
+checkpoints/
+*.h5
+
+--- Jupyter & Notebooks (NUEVO) ---
+
+.ipynb_checkpoints
+*-checkpoint.ipynb
+*.ipynb
+
+--- ML Logging & Artifacts (NUEVO) ---
+
+wandb/
+artifacts/
+mlruns/
+.tfevents.
+
+--- Testing & Quality (NUEVO) ---
+
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+--- IDEs & System ---
+
+.vscode/
+.idea/
+.DS_Store
+
+--- Logs & DB ---
+
+*.log
+logs/
+*.db
+*.sqlite3
+trade_history.db-wal
+trade_history.db-shm
+
+--- RunPod/Docker ---
+
+.runpod/
+docker-compose.override.yml

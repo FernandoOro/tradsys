@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment
+.env
+.venv/
+env/
+venv/
+.gemini/
+
+# IDE
+.vscode/
+.idea/
+
+# Data (Heavy files)
+data/raw/*
+data/processed/*
+!data/processed/.gitkeep
+data/vault/*
+data/*.db
+data/*.db-wal
+data/*.db-shm
+
+# Models (Often large, but agent1.onnx might be needed for deployment if small)
+# Uncomment to ignore all models
+# models/*
+# !models/.gitkeep
+# Ignoring intermediate checkpoints
+models/*.pth
+models/*.pt
+
+# Logs
+logs/*
+!logs/.gitkeep
+wandb/
+
+# OS
+.DS_Store
+Thumbs.db

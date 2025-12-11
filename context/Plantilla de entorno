@@ -1,0 +1,29 @@
+--- Exchange Secrets (Binance/Bybit) ---
+
+EXCHANGE_ID=binance
+API_KEY=tu_api_key_aqui
+SECRET_KEY=tu_secret_key_aqui
+IS_PAPER_TRADING=True
+
+--- RunPod / Training Config ---
+
+RUNPOD_API_KEY=tu_runpod_key
+WANDB_API_KEY=tu_wandb_key
+AWS_ACCESS_KEY_ID=tu_aws_key
+AWS_SECRET_ACCESS_KEY=tu_aws_secret
+S3_BUCKET_NAME=smart-spot-data
+
+--- Trading Parameters ---
+
+TRADING_SYMBOL=BTC/USDT
+TIMEFRAME=1m
+MAX_RISK_PER_TRADE=0.02
+LEVERAGE=1
+
+--- System ---
+
+LOG_LEVEL=INFO
+
+Region for Latency Check (e.g., ap-northeast-1 for Tokyo)
+
+EXPECTED_REGION=ap-northeast-1

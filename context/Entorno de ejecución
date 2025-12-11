@@ -1,0 +1,29 @@
+# Usar una imagen oficial de PyTorch con soporte CUDA 12.1 (Optimizado para RTX 3090/4090)
+FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime
+
+# Evitar que Python genere archivos .pyc y permitir logs en tiempo real
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Directorio de trabajo
+WORKDIR /app
+
+# Instalar dependencias del sistema necesarias para TA-Lib o compilaciones
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copiar y instalar dependencias de Python
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiar el código fuente
+COPY . .
+
+# Crear directorios de datos si no existen (para evitar errores de permisos)
+RUN mkdir -p data/raw data/processed data/vault logs
+
+# Comando por defecto (se sobreescribe en docker-compose o RunPod)
+CMD ["python", "scripts/run_bot.py", "--mode", "paper"]

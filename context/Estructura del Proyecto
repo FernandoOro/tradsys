@@ -1,0 +1,58 @@
+Estructura de Directorios Sugerida: Smart Spot Trading
+
+Esta estructura está diseñada para separar claramente el entorno de entrenamiento (RunPod) del entorno de ejecución (VPS), manteniendo una base de código compartida.
+
+smart-spot-trading/
+├── PROJECT_CONTEXT.md       # Reglas Maestras y Arquitectura
+├── .env                     # Variables de entorno (API Keys) - NO SUBIR A GIT
+├── requirements.txt         # Dependencias de Python
+├── docker-compose.yml       # Orquestación de contenedores
+├── README.md                # Documentación de despliegue
+
+├── data/                    # Almacenamiento local de datos (Ignorado por Git)
+│   ├── raw/                 # Datos descargados de CCXT
+│   ├── processed/           # Datos parquet normalizados (Z-Score)
+│   └── vault/               # Datos "Hold-out" para validación final
+
+├── src/                     # Código Fuente Principal
+│   ├── init.py
+│   ├── config.py            # Configuraciones globales (Paths, Constantes)
+│   │
+│   ├── data/                # Ingeniería de Datos
+│   │   ├── loader.py        # Descarga CCXT y gestión de caché
+│   │   ├── features.py      # Cálculo de indicadores, Time Embeddings, Fractional Diff
+│   │   ├── normalization.py # Rolling Z-Score logic
+│   │   └── sanitation.py    # Filtros de anomalías y Bad Ticks
+│   │
+│   ├── models/              # Arquitecturas PyTorch (Base para Agentes)
+│   │   ├── agents/          # Definición de clases de modelos
+│   │   │   ├── transformer.py # Agente 1 (Trend)
+│   │   │   ├── resnet_mlp.py  # Agente 2 (Reversion)
+│   │   │   └── tcn.py         # Agente 3 (Volatility)
+│   │   ├── ensemble/
+│   │   │   ├── gating.py      # Orquestador (Attention/HRP)
+│   │   │   └── meta_label.py  # Meta-modelo secundario
+│   │   └── losses.py        # Focal Loss, Huber Loss customizadas
+│   │
+│   ├── training/            # Lógica de Entrenamiento (RunPod)
+│   │   ├── train_loop.py    # Bucle principal con Gradient Accumulation
+│   │   ├── optimization.py  # Optuna Objective Functions
+│   │   ├── validation.py    # Purged K-Fold & Adversarial Validation
+│   │   └── export.py        # Conversión a ONNX + Quantization
+│   │
+│   └── strategy/            # Lógica de Trading en Vivo (VPS)
+│       ├── signals.py       # Inferencia ONNX
+│       ├── risk.py          # Dynamic Position Sizing & Kelly Criterion
+│       ├── execution.py     # Smart Router (Maker/Taker logic)
+│       └── state.py         # Gestión de SQLite y Reconciliación
+│
+├── scripts/                 # Scripts de utilidad y Entrypoints
+│   ├── run_training.py      # Entrypoint para Docker en RunPod
+│   ├── run_bot.py           # Entrypoint para el VPS (Live/Paper)
+│   ├── download_data.py     # Script manual de descarga
+│   └── panic.py             # Script de emergencia (Kill Switch)
+│
+└── tests/                   # Quality Assurance
+├── test_math.py         # Tests de fórmulas de riesgo
+├── test_exchange.py     # Mocks de API
+└── test_leakage.py      # Verificación de Data Leakage

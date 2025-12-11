@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: smart_spot_bot
+    command: python scripts/run_bot.py --mode paper
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./logs:/app/logs
+    env_file:
+      - .env
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  dashboard:
+    build: .
+    container_name: smart_spot_dashboard
+    command: streamlit run scripts/dashboard.py --server.port 8501 --server.address 0.0.0.0
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data:ro # Read-Only access to Data Dir (where DB lives)
+      - ./logs:/app/logs:ro
+    env_file:
+      - .env
+    restart: unless-stopped
+    depends_on:
+      - bot
+
+networks:
+  default:
+    driver: bridge

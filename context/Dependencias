@@ -1,0 +1,37 @@
+--- Core Deep Learning & Math ---
+
+torch>=2.1.0             # PyTorch Nativo
+numpy>=1.24.0
+pandas>=2.0.0
+scikit-learn>=1.3.0      # Para PCA y Métricas
+statsmodels>=0.14.0      # Para Fractional Differencing
+hmmlearn>=0.3.0          # Para Market Regime Detection (HMM)
+optuna>=3.4.0            # Para Optimización de Hiperparámetros
+
+--- Data & Exchange ---
+
+ccxt>=4.1.0              # Conexión a Binance/Bybit
+pyarrow>=14.0.0          # Soporte para Parquet (Rápido)
+vectorbt>=0.25.0         # Backtesting Vectorizado rápido
+pandas-ta>=0.3.14        # Indicadores Técnicos
+
+--- Inference & Deployment ---
+
+onnx>=1.15.0
+onnxruntime>=1.16.0      # Runtime ligero para CPU (VPS)
+asyncio                  # (Standard lib, no necesita install pero recordar usarlo)
+
+--- Infrastructure & Utils ---
+
+python-dotenv>=1.0.0     # Gestión de Secretos
+loguru>=0.7.2            # Logging rotativo profesional
+sqlalchemy>=2.0.0        # ORM para SQLite
+requests>=2.31.0         # Para Webhooks (Discord)
+tqdm>=4.66.0             # Barras de progreso
+
+--- Optional / Dev ---
+
+jupyterlab               # Para análisis local
+matplotlib               # Graficación
+seaborn                  # Graficación estadística
+pytest                   # Testing
