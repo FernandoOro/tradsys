@@ -52,4 +52,18 @@ Use these settings for future runs. Do not revert to "Safe Mode" unless hardware
 For the next session, focus on:
 1.  **Feature Engineering**: The current set is basic (OHLCV + RSI/MACD). Add **Order Book Imbalance** or **Fractional Diff** features if enabled.
 2.  **Hyperparameter Tuning**: Re-run `src/optimization/tuner.py` targeting the new TBM dataset.
-3.  **Backtesting**: The `models/agent1.onnx` is ready. Test it in the `backtesting` module using the TBM logic for exit signals.
+### 6. Execution Workflow Protocol (CRITICAL)
+> [!IMPORTANT]
+> **RULE: NO LOCAL EXECUTION of Training/Tuning Scripts.**
+> The local machine (fer @ linux) is for **CODE ONLY**. All heavy lifting happens on RunPod.
+
+**Correct Workflow:**
+1.  **Code (Local)**: Edit `scripts/train_hmm.py`, `src/...`.
+2.  **Push (Local)**: `git add . && git commit -m "..." && git push`
+3.  **Pull (RunPod)**: `cd /workspace/tradsys && git pull`
+4.  **Execute (RunPod)**: `python scripts/train_hmm.py`
+
+**Why?**
+- Local machine lacks RAM/GPU.
+- RunPod environment (Docker) has the correct dependencies.
+- It prevents "It works on my machine" syndrome.
