@@ -163,38 +163,47 @@ def main(args):
         
         # Helper to create sequences
         def create_sequences(df, feat_cols, target_col, seq_len):
-            data = df[feat_cols].values
-            targets = df[target_col].values
+            logger.info("Vectorizing Sequences (Numpy Stride Tricks)...")
+            from numpy.lib.stride_tricks import sliding_window_view
+
+            data = df[feat_cols].values # (N, F)
+            targets = df[target_col].values # (N,)
             
-            # Extract time data to numpy ONCE (Critical Optimization)
+            # Time Data
             time_cols = ['hour_sin', 'hour_cos', 'day_sin', 'day_cos']
-            has_time = all([c in df.columns for c in time_cols])
-            
-            if has_time:
-                time_data = df[time_cols].values
+            if all([c in df.columns for c in time_cols]):
+                time_data = df[time_cols].values # (N, 4)
             else:
-                logger.warning("Time columns missing. Using random noise for time.")
                 time_data = np.random.randn(len(df), 4)
 
-            xs, ts, ys = [], [], []
+            # 1. Create 3D View for Features
+            # sliding_window_view(data, window_shape=L, axis=0) -> (N-L+1, F, L)
+            # We transpose to (N-L+1, L, F)
+            X_strided = sliding_window_view(data, window_shape=seq_len, axis=0)
+            X = X_strided.transpose(0, 2, 1)
+
+            # 2. Create 3D View for Time
+            T_strided = sliding_window_view(time_data, window_shape=seq_len, axis=0)
+            T = T_strided.transpose(0, 2, 1)
+
+            # 3. Align Targets
+            # We want target at i+seq_len.
+            # Windows are [0..L-1], [1..L], ... [N-L..N-1]
+            # Window 0 predicts target[L]
+            # Window N-L-1 predicts target[N-1]
+            # Window N-L predicts target[N] (Out of bounds)
             
-            length = len(df) - seq_len
-            logger.info(f"Processing {length} sequences (Optimized)...")
+            # So we discard the very last window to ensure we have a next-step target
+            X = X[:-1]
+            T = T[:-1]
             
-            for i in range(length):
-                # Pure Numpy Slicing (Instantly fast)
-                x = data[i:i+seq_len]
-                y = targets[i+seq_len]
-                t = time_data[i:i+seq_len]
-                
-                xs.append(x)
-                ys.append(y)
-                ts.append(t)
-                
-                if i % 10000 == 0 and i > 0:
-                    print(f"DEBUG: Processed {i}/{length} sequences...")
-                
-            return np.array(xs), np.array(ts), np.array(ys)
+            # Targets start from L to end
+            Y = targets[seq_len:]
+            
+            logger.info(f"Sequences Created! shape={X.shape}, ram={X.nbytes / 1024**2:.1f}MB")
+            
+            # FORCE COPY to ensure memory is contiguous for PyTorch
+            return np.ascontiguousarray(X), np.ascontiguousarray(T), np.ascontiguousarray(Y)
             
         logger.info("Creating Sequences (Train)...")
         X_train, T_train, Y_train_raw = create_sequences(train_df, feature_cols, 'target', seq_len)
