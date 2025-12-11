@@ -158,7 +158,11 @@ def run_comparison():
     p_conf = valid_df['confidence']
     
     # X_features Must match training features exactly (PC_0..PC_7)
-    X_audit = valid_df[final_feats]
+    # XGBoost was trained with 'f0', 'f1'... (or numpy default). 
+    # We must rename PC_0 -> f0 to match signature.
+    X_audit = valid_df[final_feats].copy()
+    new_names = {old: f"f{i}" for i, old in enumerate(final_feats)}
+    X_audit.rename(columns=new_names, inplace=True)
     
     # Get Veto Decisions
     # Threshold 0.5 for Auditor (Standard)
