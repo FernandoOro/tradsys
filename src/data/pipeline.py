@@ -24,7 +24,7 @@ class DataPipeline:
         self.normalizer = Normalizer(window_size=100)
         self.pca = PCAFeatureReducer(variance_threshold=0.95)
 
-    def run_pipeline(self, symbol: str = config.SYMBOL, timeframe: str = config.TIMEFRAME, limit: int = 5000):
+    def run_pipeline(self, symbol: str = config.SYMBOL, timeframe: str = config.TIMEFRAME, limit: int = 100000):
         # 1. Fetch with Context
         logger.info("Step 1: Fetching Market Context...")
         df = self.loader.fetch_market_context(symbol, timeframe, context_symbols=['BTC/USDT', 'ETH/USDT'], limit=limit)
