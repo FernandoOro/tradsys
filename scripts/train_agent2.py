@@ -35,7 +35,11 @@ def export_agent2_onnx(model, input_dim, seq_len=10):
     model.eval()
     dummy_input = torch.randn(1, seq_len * input_dim, requires_grad=True).to(next(model.parameters()).device)
     
-    file_path = config.MODELS_DIR / "agent2.onnx"
+    # Organize artifacts in subfolder
+    output_dir = config.MODELS_DIR / "agent2"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    file_path = output_dir / "agent2.onnx"
     logger.info(f"Exporting Agent 2 to: {file_path}")
     
     torch.onnx.export(
