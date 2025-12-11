@@ -36,6 +36,10 @@ TIMEFRAME=1m
 # ¿Es dinero real? False = Dinero Real (CUIDADO), True = Simulación
 IS_PAPER_TRADING=True
 
+# --- Strategy Profile ---
+# Opciones: SNIPER, AUDITED, RECKLESS
+STRATEGY_PROFILE=AUDITED
+
 # --- Risk Management (Safety Nets) ---
 MAX_RISK_PER_TRADE=0.02  # 2% de la cuenta
 MAX_LEVERAGE=1           # Spot trading (sin apalancamiento)
