@@ -222,10 +222,19 @@ def main(args):
             else:
                  raw_time = np.random.randn(len(train_df), 4)
 
+            logger.info("DEBUG: PreTrain Step 1: Initializing Masked Dataset...")
             masked_dataset = MaskedTimeSeriesDataset(raw_2d, raw_time, seq_len=seq_len)
-            masked_loader = DataLoader(masked_dataset, batch_size=32, shuffle=True)
+            
+            logger.info("DEBUG: PreTrain Step 2: Creating DataLoader (num_workers=0)...")
+            # Force num_workers=0 to prevent Multiprocessing Deadlocks
+            masked_loader = DataLoader(masked_dataset, batch_size=32, shuffle=True, num_workers=0, pin_memory=True)
+            
+            logger.info("DEBUG: PreTrain Step 3: Initializing PreTrainer...")
             pretrainer = PreTrainer(model)
+            
+            logger.info("DEBUG: PreTrain Step 4: Starting Train Loop...")
             pretrainer.train(masked_loader, epochs=2)
+            logger.info("DEBUG: PreTrain Step 5: Finished.")
             
         # 5. SUPERVISED TRAINING (Fine-Tuning)
         logger.info("=== Phase 3: Supervised Fine-Tuning ===")
