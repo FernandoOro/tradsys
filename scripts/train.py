@@ -161,17 +161,19 @@ def main(args):
         # Transformer expects (Batch, Seq, Feat).
         # We will create a dataset that slides over the rows.
         
-        # Helper to create sequences
-        def create_sequences(df, feat_cols, target_col, seq_len):
             logger.info("Creating Sequences (Pre-allocated Loop)...")
             
-            data = df[feat_cols].values # (N, F)
-            targets = df[target_col].values # (N,)
+            # DEBUG: Check types
+            logger.info(f"Feature Dtypes:\n{df[feat_cols].dtypes}")
+            
+            # Ensure Float32 (Fastest for Numpy/Torch)
+            data = df[feat_cols].astype(np.float32).values # (N, F)
+            targets = df[target_col].astype(np.float32).values # (N,)
             
             # Time Data
             time_cols = ['hour_sin', 'hour_cos', 'day_sin', 'day_cos']
             if all([c in df.columns for c in time_cols]):
-                time_data = df[time_cols].values # (N, 4)
+                time_data = df[time_cols].astype(np.float32).values # (N, 4)
             else:
                 time_data = np.random.randn(len(df), 4)
 
