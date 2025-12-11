@@ -89,11 +89,15 @@ class PreTrainer:
                 
                 masked_loss = (loss * mask_expanded).sum() / (mask_expanded.sum() + 1e-8)
                 
+                
                 masked_loss.backward()
                 self.optimizer.step()
                 
                 total_loss += masked_loss.item()
                 count += 1
+                
+                if batch_idx % 100 == 0:
+                    print(f"DEBUG: PreTrain Batch {batch_idx} | Loss: {masked_loss.item():.4f}")
                 
             avg_loss = total_loss / count
             logger.info(f"Epoch {epoch+1}/{epochs} | PreTrain Loss: {avg_loss:.6f}")
