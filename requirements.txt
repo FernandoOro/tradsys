@@ -18,3 +18,4 @@ optuna
 onnxruntime
 onnx
 onnxscript
+psutil

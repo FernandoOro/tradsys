@@ -12,7 +12,13 @@ import logging
 import requests
 import torch
 import traceback
+import gc
 from torch.utils.data import DataLoader, TensorDataset
+
+try:
+    import psutil
+except ImportError:
+    psutil = None
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -27,6 +33,14 @@ from src.models.ensemble.meta_labeling import MetaAuditor
 from src.data.frac_diff import FractionalDifferencing
 
 logger = logging.getLogger(__name__)
+
+def log_memory(step=""):
+    if psutil:
+        process = psutil.Process(os.getpid())
+        mem = process.memory_info().rss / 1024 ** 2
+        logger.info(f"💾 MEMORY [{step}]: {mem:.1f} MB")
+    else:
+        logger.info(f"💾 MEMORY [{step}]: N/A (psutil missing)")
 
 def terminate_pod():
     """
@@ -121,6 +135,7 @@ def main(args):
     try:
         logging.basicConfig(level=logging.INFO)
         logger.info("Starting ADVANCED Training Pipeline...")
+        log_memory("Start")
         
         # 1. Load Data (Real Data from Pipeline)
         logger.info("Loading Real Data from 'data/processed'...")
@@ -135,10 +150,12 @@ def main(args):
             print("DEBUG: Loading Train Parquet...")
             train_df = pd.read_parquet(train_path)
             print(f"DEBUG: Train Loaded. Shape: {train_df.shape}")
+            log_memory("Train Loaded")
             
             print("DEBUG: Loading Val Parquet...")
             test_df = pd.read_parquet(test_path)
             print(f"DEBUG: Val Loaded. Shape: {test_df.shape}")
+            log_memory("Val Loaded")
             
             # Identify Feature Columns
             if 'target' not in train_df.columns:
@@ -172,7 +189,7 @@ def main(args):
             logger.info("⚠️ Skipping Adversarial Validation (User Requested).")
         else:
             adv_val = AdversarialValidator()
-            # ... (skipped for brevity, assuming standard logic)
+            # ... (skipped for brevity)
             pass
 
         # Prepare Data for Lazy Loading
@@ -194,15 +211,23 @@ def main(args):
         train_feats, train_times, train_targets = prepare_raw(train_df)
         val_feats, val_times, val_targets = prepare_raw(test_df)
         
+        # CLEAR RAW DATAFRAMES FROM MEMORY
+        # We only need the numpy arrays now (which are referenced inside prepare_raw Scope, 
+        # wait, they are returned and assigned to variables. 
+        # We can delete train_df and test_df!)
+        del train_df, test_df
+        gc.collect()
+        log_memory("After DF Cleanup")
+        
         # Create Datasets
         logger.info("Initializing Lazy Datasets...")
         dataset = LazySequenceDataset(train_feats, train_times, train_targets, seq_len)
         val_dataset = LazySequenceDataset(val_feats, val_times, val_targets, seq_len)
         
         # DataLoaders (num_workers=0 to avoid multiprocessing clones on RunPod if unstable)
-        # Using pin_memory=True for Speed if GPU used
-        train_loader = DataLoader(dataset, batch_size=32, shuffle=True, num_workers=0, pin_memory=True)
-        val_loader = DataLoader(val_dataset, batch_size=32, num_workers=0, pin_memory=True)
+        # Using pin_memory=False for saving RAM
+        train_loader = DataLoader(dataset, batch_size=32, shuffle=True, num_workers=0, pin_memory=False)
+        val_loader = DataLoader(val_dataset, batch_size=32, num_workers=0, pin_memory=False)
         
         logger.info("DataLoaders Ready.")
         
@@ -213,21 +238,52 @@ def main(args):
         # 4. PRE-TRAINING (Self-Supervised)
         if args.pretrain:
             logger.info("=== Phase 9: Self-Supervised Pre-Training ===")
-            raw_2d = train_df[feature_cols].values
+            log_memory("Before PreTrain")
             
-            # Time features
-            time_cols = ['hour_sin', 'hour_cos', 'day_sin', 'day_cos']
-            if all([c in train_df.columns for c in time_cols]):
-                 raw_time = train_df[time_cols].values
-            else:
-                 raw_time = np.random.randn(len(train_df), 4)
-
+            # Re-using the raw arrays we already extracted?
+            # Creating MaskedDataset creates another copy if not careful.
+            # MaskedDataset takes np.ndarray and converts to tensor.
+            # LazySequenceDataset ALSO converted to tensor.
+            # This DOUBLES memory usage.
+            
+            # Optimization: Use the tensors from dataset directly?
+            # MaskedDataset uses (N, F).
+            # LazySequenceDataset stored self.features as (N, F).
+            # Let's use those shared tensors if possible!
+            
+            # Hack: Pass dataset.features directly to MaskedDataset to share memory?
+            # MaskedDataset constructor expects np.ndarray and converts to FloatTensor.
+            # If we pass FloatTensor, it might re-wrap it.
+            # Let's hope PyTorch is smart or we modify MaskedDataset.
+            # For now, let's just delete the LazyDataset if we are PreTraining? No, we need it later.
+            
+            # To avoid OOM, let's just make sure we are not holding duplicate Numpy arrays.
+            # train_feats is numpy. dataset.features is Tensor.
+            # After creating dataset, we can delete train_feats!
+            del train_feats, train_times, train_targets
+            del val_feats, val_times, val_targets
+            gc.collect()
+            log_memory("After Numpy Cleanup")
+            
+            # BUT wait, MaskedDataset needs Raw Data.
+            # Use dataset.features.numpy() ? No, that creates copy.
+            # Use dataset.features (Tensor) directly.
+             
             logger.info("DEBUG: PreTrain Step 1: Initializing Masked Dataset...")
-            masked_dataset = MaskedTimeSeriesDataset(raw_2d, raw_time, seq_len=seq_len)
+            # We pass the TENSORS from the dataset to avoid duplication
+            # Assuming MaskedDataset can handle Tensors input (We need to check/modify it? 
+            # Standard Dataset usually expects data. Let's assume we modify MaskedDataset 
+            # to accept tensors or we accept the specific memory hit here for safety).
+            
+            # Actually, let's just pass `dataset.features`.
+            # But wait, MaskedDataset constructor calls `torch.FloatTensor(data)`.
+            # If data is already Tensor, it might copy.
+            
+            # For now, let's regenerate from dataset.features to be safe on types.
+            masked_dataset = MaskedTimeSeriesDataset(dataset.features.numpy(), dataset.time_features.numpy(), seq_len=seq_len)
             
             logger.info("DEBUG: PreTrain Step 2: Creating DataLoader (num_workers=0)...")
-            # Force num_workers=0 to prevent Multiprocessing Deadlocks
-            masked_loader = DataLoader(masked_dataset, batch_size=32, shuffle=True, num_workers=0, pin_memory=True)
+            masked_loader = DataLoader(masked_dataset, batch_size=32, shuffle=True, num_workers=0, pin_memory=False)
             
             logger.info("DEBUG: PreTrain Step 3: Initializing PreTrainer...")
             pretrainer = PreTrainer(model)
@@ -236,8 +292,15 @@ def main(args):
             pretrainer.train(masked_loader, epochs=2)
             logger.info("DEBUG: PreTrain Step 5: Finished.")
             
+            # Cleanup PreTrain components
+            del masked_dataset, masked_loader, pretrainer
+            gc.collect()
+            log_memory("After PreTrain Cleanup")
+            
         # 5. SUPERVISED TRAINING (Fine-Tuning)
         logger.info("=== Phase 3: Supervised Fine-Tuning ===")
+        log_memory("Before Training")
+        
         # Updated LR from optimization (Trial 0)
         trainer = Trainer(model, lr=4.6e-5)
         trainer.train(train_loader, val_loader, epochs=args.epochs)

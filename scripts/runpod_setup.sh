@@ -15,7 +15,7 @@ echo "📦 Verificando librerías..."
 # Fix: Desinstalar sklearn corrupto
 pip uninstall -y scikit-learn
 # Instalar solo lo necesario SIN caché para no explotar la RAM (Torch ya viene instalado)
-pip install --no-cache-dir scikit-learn ccxt
+pip install --no-cache-dir scikit-learn ccxt psutil
 # Instalar resto de requirements sin forzar actualización de Torch
 pip install --no-cache-dir -r requirements.txt
 
