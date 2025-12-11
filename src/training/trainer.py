@@ -60,6 +60,12 @@ class Trainer:
         if config.WANDB_API_KEY:
             wandb.login(key=config.WANDB_API_KEY)
             wandb.init(project="smart-spot-trader", config={"lr": lr})
+            
+        # Scheduler (Dynamic Correction)
+        # Reduces LR if Val Loss doesn't improve for 5 epochs
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer, mode='min', factor=0.5, patience=5, verbose=True
+        )
 
     def train(self, train_loader: DataLoader, val_loader: DataLoader, epochs: int = 10):
         best_val_loss = float('inf')
@@ -118,7 +124,10 @@ class Trainer:
             logger.info(f"Epoch {epoch+1}/{epochs} | Train Loss: {avg_train_loss:.4f} | Val Loss: {val_loss:.4f}")
             
             if wandb.run:
-                wandb.log({"train_loss": avg_train_loss, "val_loss": val_loss, "epoch": epoch})
+                wandb.log({"train_loss": avg_train_loss, "val_loss": val_loss, "epoch": epoch, "lr": self.optimizer.param_groups[0]['lr']})
+            
+            # Dynamic Correction
+            self.scheduler.step(val_loss)
             
             if val_loss < best_val_loss:
                 best_val_loss = val_loss

@@ -204,9 +204,9 @@ def main(args):
         val_dataset = TensorDataset(torch.FloatTensor(X_test), torch.FloatTensor(T_test), torch.FloatTensor(np.stack([np.where(Y_test_raw>0.5, 1.0, -1.0), np.ones_like(Y_test_raw)], axis=1)))
         val_loader = DataLoader(val_dataset, batch_size=32)
         
-        # Winning Hyperparameters form Optuna (Trial 3)
-        # d_model=32, nhead=4, num_layers=2, lr=1.15e-4, dropout=0.26
-        model = TransformerAgent(input_dim=feat_dim, d_model=32, nhead=4, num_layers=2, dropout=0.26)
+        # Winning Hyperparameters form Optuna (Trial 0)
+        # d_model=64, nhead=8, num_layers=3, lr=4.6e-5, dropout=0.23
+        model = TransformerAgent(input_dim=feat_dim, d_model=64, nhead=8, num_layers=3, dropout=0.23)
         
         # 4. PRE-TRAINING (Self-Supervised)
         if args.pretrain:
@@ -227,8 +227,8 @@ def main(args):
             
         # 5. SUPERVISED TRAINING (Fine-Tuning)
         logger.info("=== Phase 3: Supervised Fine-Tuning ===")
-        # Updated LR from optimization
-        trainer = Trainer(model, lr=1.15e-4)
+        # Updated LR from optimization (Trial 0)
+        trainer = Trainer(model, lr=4.6e-5)
         trainer.train(train_loader, val_loader, epochs=args.epochs)
         
         # 6. META-LABELING (The Auditor)
