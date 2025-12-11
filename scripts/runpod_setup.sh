@@ -37,8 +37,8 @@ TIMEFRAME=1m
 IS_PAPER_TRADING=True
 
 # --- Strategy Profile ---
-# Opciones: SNIPER, AUDITED, RECKLESS
-STRATEGY_PROFILE=AUDITED
+# Opciones: SNIPER, AUDITED, RECKLESS, ENSEMBLE
+STRATEGY_PROFILE=ENSEMBLE
 
 # --- Risk Management (Safety Nets) ---
 MAX_RISK_PER_TRADE=0.02  # 2% de la cuenta
