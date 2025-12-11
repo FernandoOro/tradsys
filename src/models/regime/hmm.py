@@ -47,11 +47,30 @@ class RegimeDetector:
         self.model.fit(X)
         self.is_fitted = True
         
-        # Analyze states
-        # Usually we want to map states to semantics (e.g. State 0 has high variance -> Crisis)
-        # The means/variances of the components tell us this.
+        # --- ENFORCE SORTING BY VOLATILITY ---
+        # Feature 1 is 'volatility_24h' (variance proxy). Feature 0 is 'log_ret'.
+        # We sort states based on the MEAN of Feature 1 (Avg Volatility of that state).
+        # Or better: The Variance of Feature 0 (Log Returns).
+        # GaussianHMM: covars_ is shape (n_comp, n_features, n_features) or (n_comp, n_features) if diag.
+        # Let's use the MEAN of the Volatility Feature (index 1).
+        
+        # Check feature dims
+        # data cols: ['log_ret', 'volatility_24h']
+        state_vol_means = self.model.means_[:, 1]
+        
+        # Get sorted indices (Low Vol -> High Vol)
+        sorted_idx = np.argsort(state_vol_means)
+        logger.info(f"Sorting States by Volatility: {sorted_idx}")
+        
+        # Reorder Model Parameters
+        self.model.startprob_ = self.model.startprob_[sorted_idx]
+        self.model.transmat_ = self.model.transmat_[sorted_idx, :][:, sorted_idx]
+        self.model.means_ = self.model.means_[sorted_idx]
+        self.model.covars_ = self.model.covars_[sorted_idx]
+        
+        # Analyze states (After Sort)
         for i in range(self.n_components):
-            logger.info(f"State {i}: Mean={self.model.means_[i]}, Var={np.diag(self.model.covars_[i])}")
+            logger.info(f"State {i}: MeanVol={self.model.means_[i][1]:.6f}, VarRet={np.diag(self.model.covars_[i])[0]:.6f}")
             
         # Save
         self.save_model()
