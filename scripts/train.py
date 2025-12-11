@@ -114,24 +114,27 @@ def create_sequences(df, feat_cols, target_col, seq_len):
     num_sequences = len(df) - seq_len
     feat_dim = data.shape[1]
     
-    # PRE-ALLOCATION (Robust & Safe)
-    X = np.zeros((num_sequences, seq_len, feat_dim), dtype=np.float32)
-    T = np.zeros((num_sequences, seq_len, 4), dtype=np.float32)
-    Y = np.zeros((num_sequences,), dtype=np.float32)
+    # Advanced Vectorized Indexing (Atomic & Fast)
+    logger.info("Vectorizing Index Generation...")
     
-    logger.info(f"Target memory: {X.nbytes / 1024**2:.1f} MB. Processing {num_sequences} sequences...")
+    # 1. Create Index Matrix (N, seq_len)
+    # [0, 1, ..., 9] + [[0], [1], ...] -> [[0,..,9], [1,..,10], ...]
+    idx = np.arange(seq_len) + np.arange(num_sequences)[:, None]
     
-    # Simple Integer Loop (Safe from Deadlocks)
-    for i in range(num_sequences):
-        X[i] = data[i:i+seq_len]
-        T[i] = time_data[i:i+seq_len]
-        Y[i] = targets[i+seq_len]
+    logger.info("Slicing Data (Atomic Operation)...")
+    
+    try:
+        # 2. Slice all data at once (No Python Loop)
+        X = data[idx] # (N, seq_len, F)
+        T = time_data[idx] # (N, seq_len, 4)
+        Y = targets[np.arange(seq_len, len(df))] # Targets offset by seq_len
         
-        if i % 10000 == 0 and i > 0:
-             print(f"DEBUG: Filled {i}/{num_sequences} sequences...")
-    
-    print("DEBUG: Sequence filling complete.")
-    return X, T, Y
+        logger.info(f"Slicing Complete! X shape: {X.shape}")
+        return X, T, Y
+        
+    except Exception as e:
+        logger.error(f"Vectorization Failed: {e}")
+        raise
 
 def main(args):
     try:
