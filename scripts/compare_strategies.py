@@ -238,7 +238,7 @@ def run_comparison():
     stats_list.append({"Name": "Reckless (No Audit)", "Ret %": m3['Total Return [%]'], "Sharpe": m3['Sharpe Ratio'], "Trades": m3['Total Trades'], "Win Rate": m3['Win Rate [%]']})
 
     # D. ENSEMBLE (Holy Grail)
-    # Regime 0 -> Agent 2 (Threshold 0.70)
+    # Regime 0 -> Agent 2 (Threshold 0.80)
     # Regime 1/2 -> Agent 1 (Audited, Threshold 0.75)
     s4 = valid_df.copy()
     
@@ -246,22 +246,24 @@ def run_comparison():
     # 1. Trend Signal: (Score > 0.75) AND (Regime != 0) AND (Auditor OK)
     cond_trend_buy = (s4['pred_score'] > 0.75) & (s4['regime'] != 0) & (s4['auditor_approved'] == True)
     
-    # 2. Reversion Signal: (Agent2 > 0.70) AND (Regime == 0)
-    # Note: Agent 2 predicts 'Up', so > 0.70 is Buy. < 0.30 is Sell? 
-    # For now, let's implement Long Only for Reversion too.
-    cond_mean_buy = (s4['agent2_score'] > 0.70) & (s4['regime'] == 0)
+    # 2. Reversion Signal: (Agent2 > 0.80) AND (Regime == 0)
+    # Raised threshold to 0.80 to reduce noise
+    cond_mean_buy = (s4['agent2_score'] > 0.80) & (s4['regime'] == 0)
     
     # Combined Entry
     cond_entry = cond_trend_buy | cond_mean_buy
     
-    # Exit: 
+    # Exits
     # Trend Exit: Score < 0
-    # Mean Exit: Agent2 < 0.5? Or Standard Stop Loss?
-    # Simulator handles SL/TP. We just send Exit Signal (-1).
-    # Let's say we exit if Trend Score flips negative. 
-    # Does Agent 2 have an exit signal? 
-    # If Agent 2 Score drops below 0.5, probability of Up matches Down.
-    cond_exit = (s4['pred_score'] < 0.0) # Dominant Trend Exit
+    cond_trend_exit = (s4['pred_score'] < 0.0)
+    
+    # Mean Reversion Exit: Score < 0.5 (Confidence Lost)
+    # If the probability drops below neutral, we exit.
+    # Also if Regime changes out of 0? Maybe. But let's stick to score.
+    cond_mean_exit = (s4['agent2_score'] < 0.5)
+    
+    # Combined Exit
+    cond_exit = cond_trend_exit | cond_mean_exit
     
     s4['signal'] = np.select([cond_entry, cond_exit], [1, -1], 0)
     
