@@ -163,9 +163,8 @@ def main(args):
         
         # Helper to create sequences
         def create_sequences(df, feat_cols, target_col, seq_len):
-            logger.info("Vectorizing Sequences (Numpy Stride Tricks)...")
-            from numpy.lib.stride_tricks import sliding_window_view
-
+            logger.info("Creating Sequences (Pre-allocated Loop)...")
+            
             data = df[feat_cols].values # (N, F)
             targets = df[target_col].values # (N,)
             
@@ -176,42 +175,27 @@ def main(args):
             else:
                 time_data = np.random.randn(len(df), 4)
 
-            # 1. Create 3D View for Features
-            # sliding_window_view(data, window_shape=L, axis=0) -> (N-L+1, F, L)
-            # We transpose to (N-L+1, L, F)
-            X_strided = sliding_window_view(data, window_shape=seq_len, axis=0)
-            X = X_strided.transpose(0, 2, 1)
-
-            # 2. Create 3D View for Time
-            T_strided = sliding_window_view(time_data, window_shape=seq_len, axis=0)
-            T = T_strided.transpose(0, 2, 1)
-
-            # 3. Align Targets
-            # We want target at i+seq_len.
-            # Windows are [0..L-1], [1..L], ... [N-L..N-1]
-            # Window 0 predicts target[L]
-            # Window N-L-1 predicts target[N-1]
-            # Window N-L predicts target[N] (Out of bounds)
+            num_sequences = len(df) - seq_len
+            feat_dim = data.shape[1]
             
-            # So we discard the very last window to ensure we have a next-step target
-            X = X[:-1]
-            T = T[:-1]
+            # PRE-ALLOCATION (Robust & Safe)
+            X = np.zeros((num_sequences, seq_len, feat_dim), dtype=np.float32)
+            T = np.zeros((num_sequences, seq_len, 4), dtype=np.float32)
+            Y = np.zeros((num_sequences,), dtype=np.float32)
             
-            # Targets start from L to end
-            Y = targets[seq_len:]
+            logger.info(f"Target memory: {X.nbytes / 1024**2:.1f} MB. Processing {num_sequences} sequences...")
             
-            logger.info(f"Sequences Created! shape={X.shape}, ram={X.nbytes / 1024**2:.1f}MB")
+            # Simple Integer Loop (Safe from Deadlocks)
+            for i in range(num_sequences):
+                X[i] = data[i:i+seq_len]
+                T[i] = time_data[i:i+seq_len]
+                Y[i] = targets[i+seq_len]
+                
+                if i % 10000 == 0 and i > 0:
+                     print(f"DEBUG: Filled {i}/{num_sequences} sequences...")
             
-            # FORCE COPY to ensure memory is contiguous for PyTorch
-            logger.info("Copying to contiguous memory (X)...")
-            X_cont = np.ascontiguousarray(X)
-            logger.info("Copying to contiguous memory (T)...")
-            T_cont = np.ascontiguousarray(T)
-            logger.info("Copying to contiguous memory (Y)...")
-            Y_cont = np.ascontiguousarray(Y)
-            
-            logger.info("Sequence creation complete.")
-            return X_cont, T_cont, Y_cont
+            print("DEBUG: Sequence filling complete.")
+            return X, T, Y
             
         logger.info("Creating Sequences (Train)...")
         X_train, T_train, Y_train_raw = create_sequences(train_df, feature_cols, 'target', seq_len)
