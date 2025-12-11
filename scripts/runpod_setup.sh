@@ -10,11 +10,14 @@ echo "✅ PYTHONPATH configurado: $PYTHONPATH"
 echo "📥 Bajando últimos cambios de Git..."
 git pull
 
-# 3. Instalar Dependencias (Forzando reparación)
+# 3. Instalar Dependencias (Fix de Memoria y Sklearn)
 echo "📦 Verificando librerías..."
-# Fix para el error de sklearn 'metadata_routing' y 'ccxt' no encontrado
+# Fix: Desinstalar sklearn corrupto
 pip uninstall -y scikit-learn
-pip install --upgrade --force-reinstall scikit-learn ccxt -r requirements.txt
+# Instalar solo lo necesario SIN caché para no explotar la RAM (Torch ya viene instalado)
+pip install --no-cache-dir scikit-learn ccxt
+# Instalar resto de requirements sin forzar actualización de Torch
+pip install --no-cache-dir -r requirements.txt
 
 # 4. Crear .env si no existe (Plantilla básica)
 if [ ! -f .env ]; then
