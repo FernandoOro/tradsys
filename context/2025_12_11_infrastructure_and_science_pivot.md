@@ -133,3 +133,17 @@ We A/B tested two deployment profiles to solve the "Low Frequency" issue:
 *   Updated `run_bot.py` to use Threshold 0.75.
 *   The Auditor (`auditor_v1.json`) is now the primary gatekeeper for signal quality.
 *   System is ready for **High-Performance Deployment**.
+
+### 10. Phase 24: Modular Architecture & Configuration (Final Polish)
+To ensure long-term flexibility and enable scientific comparison, we refactored the monolith `run_bot.py` into a **Strategy Pattern**.
+
+*   **New Component**: `src/execution/strategies.py` (Classes: `Sniper`, `Audited`, `Reckless`).
+*   **Configuration**: Added `STRATEGY_PROFILE` to `.env`.
+    *   `SNIPER`: Safe (0.95 Threshold).
+    *   `AUDITED`: Balanced (0.75 + Auditor).
+    *   `RECKLESS`: Aggressive (0.75).
+*   **Workflow**:
+    1.  Train.
+    2.  Run `scripts/compare_strategies.py`.
+    3.  Set winner in `.env` (via `runpod_setup.sh`).
+    4.  Deploy.
