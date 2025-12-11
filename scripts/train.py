@@ -11,6 +11,7 @@ import argparse
 import logging
 import requests
 import torch
+import traceback
 from torch.utils.data import DataLoader, TensorDataset
 
 # Add project root to path
@@ -88,6 +89,50 @@ def export_to_onnx(model, input_dim, model_name="agent1"):
     )
     logger.info("ONNX Export Successful.")
 
+# Helper function (Global Scope)
+def create_sequences(df, feat_cols, target_col, seq_len):
+    """
+    Creates sequences for Transformer input using a pre-allocated loop.
+    Returns: (X, T, Y)
+    """
+    logger.info("Creating Sequences (Pre-allocated Loop)...")
+    
+    # DEBUG: Check types
+    logger.info(f"Feature Dtypes:\n{df[feat_cols].dtypes}")
+    
+    # Ensure Float32 (Fastest for Numpy/Torch)
+    data = df[feat_cols].astype(np.float32).values # (N, F)
+    targets = df[target_col].astype(np.float32).values # (N,)
+    
+    # Time Data
+    time_cols = ['hour_sin', 'hour_cos', 'day_sin', 'day_cos']
+    if all([c in df.columns for c in time_cols]):
+        time_data = df[time_cols].astype(np.float32).values # (N, 4)
+    else:
+        time_data = np.random.randn(len(df), 4)
+
+    num_sequences = len(df) - seq_len
+    feat_dim = data.shape[1]
+    
+    # PRE-ALLOCATION (Robust & Safe)
+    X = np.zeros((num_sequences, seq_len, feat_dim), dtype=np.float32)
+    T = np.zeros((num_sequences, seq_len, 4), dtype=np.float32)
+    Y = np.zeros((num_sequences,), dtype=np.float32)
+    
+    logger.info(f"Target memory: {X.nbytes / 1024**2:.1f} MB. Processing {num_sequences} sequences...")
+    
+    # Simple Integer Loop (Safe from Deadlocks)
+    for i in range(num_sequences):
+        X[i] = data[i:i+seq_len]
+        T[i] = time_data[i:i+seq_len]
+        Y[i] = targets[i+seq_len]
+        
+        if i % 10000 == 0 and i > 0:
+             print(f"DEBUG: Filled {i}/{num_sequences} sequences...")
+    
+    print("DEBUG: Sequence filling complete.")
+    return X, T, Y
+
 def main(args):
     try:
         logging.basicConfig(level=logging.INFO)
@@ -161,44 +206,6 @@ def main(args):
         # Transformer expects (Batch, Seq, Feat).
         # We will create a dataset that slides over the rows.
         
-            logger.info("Creating Sequences (Pre-allocated Loop)...")
-            
-            # DEBUG: Check types
-            logger.info(f"Feature Dtypes:\n{df[feat_cols].dtypes}")
-            
-            # Ensure Float32 (Fastest for Numpy/Torch)
-            data = df[feat_cols].astype(np.float32).values # (N, F)
-            targets = df[target_col].astype(np.float32).values # (N,)
-            
-            # Time Data
-            time_cols = ['hour_sin', 'hour_cos', 'day_sin', 'day_cos']
-            if all([c in df.columns for c in time_cols]):
-                time_data = df[time_cols].astype(np.float32).values # (N, 4)
-            else:
-                time_data = np.random.randn(len(df), 4)
-
-            num_sequences = len(df) - seq_len
-            feat_dim = data.shape[1]
-            
-            # PRE-ALLOCATION (Robust & Safe)
-            X = np.zeros((num_sequences, seq_len, feat_dim), dtype=np.float32)
-            T = np.zeros((num_sequences, seq_len, 4), dtype=np.float32)
-            Y = np.zeros((num_sequences,), dtype=np.float32)
-            
-            logger.info(f"Target memory: {X.nbytes / 1024**2:.1f} MB. Processing {num_sequences} sequences...")
-            
-            # Simple Integer Loop (Safe from Deadlocks)
-            for i in range(num_sequences):
-                X[i] = data[i:i+seq_len]
-                T[i] = time_data[i:i+seq_len]
-                Y[i] = targets[i+seq_len]
-                
-                if i % 10000 == 0 and i > 0:
-                     print(f"DEBUG: Filled {i}/{num_sequences} sequences...")
-            
-            print("DEBUG: Sequence filling complete.")
-            return X, T, Y
-            
         logger.info("Creating Sequences (Train)...")
         X_train, T_train, Y_train_raw = create_sequences(train_df, feature_cols, 'target', seq_len)
         logger.info("Creating Sequences (Val)...")
