@@ -14,6 +14,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.config import config
 from src.inference.predictor import Predictor
 from src.backtesting.simulator import Simulator
+from src.models.regime.hmm import RegimeDetector
+import joblib
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Backtester")
@@ -113,6 +115,53 @@ def run_backtest():
     except Exception as e:
         logger.error(f"Could not load model: {e}. Make sure agent1.onnx exists.")
         return
+
+    # Load HMM for Filter
+    hmm_path = config.MODELS_DIR / "hmm_regime.pkl"
+    if hmm_path.exists():
+        logger.info(f"Loading HMM from {hmm_path}...")
+        hmm_model = joblib.load(hmm_path)
+        # We need to predict states for the validation set.
+        # HMM expects [log_ret, vol]. We need to reconstruct this or use RegimeDetector helper?
+        # RegimeDetector.prepare_data needs a DF with 'close'.
+        # We have df_val.
+        
+        # Helper wrapper
+        rd = RegimeDetector(n_components=3)
+        rd.model = hmm_model
+        rd.is_fitted = True
+        
+        # Predict all states
+        # catch warnings
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            # prepare_data returns a subset DataFrame
+            # We need to align it with df_val
+            # The HMM might have diff length due to rolling windows in prepare_data
+            # prepare_data does dropna().
+            
+            # Let's do it manually on aligned data to represent "Real-Time" knowledge
+            # Actually, prepare_data computes log_ret and rolling vol.
+            # This causes NaNs at start.
+            
+            # Let's use the helper but be careful with alignment.
+            # We only care about the valid_df part (iloc[seq_len:])
+            
+            # Calculate features on full df_val
+            hmm_data = rd.prepare_data(df_val) 
+            # Predict
+            states = rd.model.predict(hmm_data.values)
+            
+            # Align: hmm_data index vs df_val index
+            # Reindex states to match df_val
+            s_series = pd.Series(states, index=hmm_data.index)
+            df_val['regime'] = s_series.reindex(df_val.index).fillna(-1) # -1 for unknown
+            
+        logger.info("HMM States generated.")
+    else:
+        logger.warning("HMM Model not found. Running without Regime Filter.")
+        df_val['regime'] = 1 # Default to allow everything
     
     all_probs = []
     
@@ -130,16 +179,38 @@ def run_backtest():
     valid_df['pred_score'] = all_probs
     
     # Signal Logic
-    # Buy (1) if Score > 0.5
-    # Close (-1) if Score < 0.0 
-    conditions = [
-        valid_df['pred_score'] > 0.5,
-        valid_df['pred_score'] < 0.0
-    ]
+    # 1. Confidence Threshold (Stricter)
+    THRESHOLD = 0.95
+    
+    # 2. Regime Filter
+    # We want to AVOID State 0 (Low Vol/Range/Bearish determined by training logs)
+    # State 0 Mean Ret was Negative in logs.
+    # State 1 Mean Ret was Positive.
+    # State 2 Mean Ret was High Positive (Volatile).
+    # ALLOW: State 1 and 2. BLOCK: State 0.
+    
+    # Check if 'regime' column exists
+    if 'regime' in valid_df.columns:
+        # 0 is blocked
+        regime_condition = (valid_df['regime'] != 0) 
+    else:
+        regime_condition = True
+
+    # Combined Signal
+    # Buy (1)
+    buy_signal = (valid_df['pred_score'] > THRESHOLD) & regime_condition
+    
+    # Exit (-1)
+    # Exit if Score drops below 0.0 OR Regime becomes 0 (Panic/Bear switch)?
+    # Let's keep specific exit logic simple first
+    sell_signal = (valid_df['pred_score'] < 0.0)
+    
+    conditions = [buy_signal, sell_signal]
     choices = [1, -1]
     valid_df['signal_trade'] = np.select(conditions, choices, default=0)
     
     logger.info(f"Generated {np.sum(valid_df['signal_trade'] == 1)} Entries and {np.sum(valid_df['signal_trade'] == -1)} Exits.")
+    logger.info(f"Regime Filter skipped {len(valid_df[ (valid_df['pred_score'] > THRESHOLD) & (~regime_condition) ])} trades.")
     
     # Simulation
     sim = Simulator(fees=0.001, slippage=0.0005)
