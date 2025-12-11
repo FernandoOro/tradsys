@@ -146,12 +146,15 @@ def main(args):
         test_df.fillna(0, inplace=True)
         
         # 3. ADVERSARIAL VALIDATION (Safety)
-        adv_val = AdversarialValidator()
-        auc = adv_val.check_drift(train_df, test_df)
-        if auc > 0.7:
-             logger.warning("CRITICAL: Covariate Shift Detected (AUC > 0.7). Proceeding with CAUTION (Demo Mode).")
-             # raise ValueError("Data Drift > 0.7 AUC") # Disabled for First Run Demo
-             
+        if hasattr(args, 'no_adv_val') and args.no_adv_val:
+            logger.info("⚠️ Skipping Adversarial Validation (User Requested).")
+        else:
+            adv_val = AdversarialValidator()
+            auc = adv_val.check_drift(train_df, test_df)
+            if auc > 0.7:
+                 logger.warning("CRITICAL: Covariate Shift Detected (AUC > 0.7). Proceeding with CAUTION (Demo Mode).")
+                 # raise ValueError("Data Drift > 0.7 AUC") # Disabled for First Run Demo
+
         # Prepare Tensors for Model
         # Need to create sequences (Sliding Window)
         # For simplicity in this script, we'll use a crude sliding window or if data is already row-per-step
@@ -293,6 +296,7 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=5, help="Number of epochs")
     parser.add_argument("--autokill", action="store_true", help="Enable RunPod Auto-Kill Switch")
     parser.add_argument("--pretrain", action="store_true", help="Deep Pre-Training")
+    parser.add_argument("--no-adv-val", action="store_true", help="Skip Adversarial Validation (Debug)")
     args = parser.parse_args()
     
     main(args)
