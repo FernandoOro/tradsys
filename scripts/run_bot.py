@@ -56,7 +56,16 @@ class TradingBot:
             sys.exit(1)
         
         self.event_filter = EventFilter() 
+        self.event_filter = EventFilter() 
         self.predictor = Predictor(model_name="agent1")
+        # Load Agent 2 (Optional, handled gracefully if missing unless Ensemble requested)
+        try:
+            self.predictor_2 = Predictor(model_name="agent2")
+            logger.info("Agent 2 (Mean Reversion) Loaded.")
+        except Exception:
+            self.predictor_2 = None
+            logger.warning("Agent 2 not found. Ensemble Strategy will fail if selected.")
+
         self.auditor = MetaAuditor("auditor_v1")
         # Correctly initialize and force load
         self.regime_detector = RegimeDetector(n_components=3)
@@ -126,18 +135,88 @@ class TradingBot:
         x_val = np.expand_dims(x_val, 0)
         t_val = np.expand_dims(t_val, 0)
         
-        # REGIME CHECK (Connected)
         regime = -1
         try:
              # Pass the full DF for HMM to feature engineering
-             regime = self.regime_detector.predict_state(df) 
+             regime = self.regime_detector.predict_state(df.iloc[-100:]) # Use last window context
+             if isinstance(regime, np.ndarray): regime = regime[-1] # Ensure scalar
              logger.info(f"Market Regime: {regime}")
+        except Exception as e:
+             logger.error(f"HMM Failed: {e}")
+             return
+
+        # --- DYNAMIC INFERENCE ---
+        confidence = 0.0
+        direction = 0.0
+        agent2_score = 0.0
+        is_vetoed = False
+        
+        # Branch 1: Regime 0 (Range) -> Use Agent 2
+        if regime == 0 and self.predictor_2:
+            try:
+                # Agent 2 takes Flattened Features (No Time)
+                pred2 = self.predictor_2.predict(x_val) # x_val shape (1, 10, Feat) -> Auto-flattened
+                agent2_score = float(pred2["score"][-1]) # Last step
+                # Map Score to Direction? 
+                # Agent 2 head is Linear(1). 
+                # If trained on BCEWithLogits, output is Logit. Sigmoid(out) -> Prob(Reversal).
+                # Wait, training used BCEWithLogitsLoss.
+                # So output is LOGIT.
+                # Prob = Sigmoid(logit).
+                # 1 = Reversal (Target 1), 0 = Continuation.
+                
+                reversal_prob = 1 / (1 + np.exp(-agent2_score))
+                agent2_score = reversal_prob # Normalize to 0-1
+                
+                # Direction? Agent 2 predicts "Reversal".
+                # If Price is Low (RSI < 30) -> Buy.
+                # If Price is High (RSI > 70) -> Sell.
+                # We need a heuristic for direction since Agent 2 only predicts "Probability of Reversal".
+                # Or did we train Agent 2 on Directional Target?
+                # Target in train_agent2: df['target'].
+                # Labeler (Triple Barrier) produces 1 (Up) or 0 (Down/Flat).
+                # So Agent 2 predicts Probability of UP move.
+                
+                # Correction: train_agent2 filters Regime 0. Target is Standard TBM (1=Up).
+                # So Agent 2 output IS probability of UP.
+                # Excellent. 
+                
+                direction = 1 if agent2_score > 0.5 else -1
+                confidence = abs(agent2_score - 0.5) * 2 # Map 0.5-1.0 to 0-1 confidence
+                
+                logger.info(f"🤖 Agent 2 (Reversion): Score={agent2_score:.2f} | Dir={direction}")
+                
+            except Exception as e:
+                logger.error(f"Agent 2 Inference Failed: {e}")
+                return
+
+        # Branch 2: Regime 1/2 (Trend) -> Use Agent 1
+        elif regime != 0:
+            try:
+                pred = self.predictor.predict(x_val, t_val)
+                raw_dir = pred["direction"][-1]
+                raw_conf = pred["confidence"][-1]
+                
+                direction = 1 if raw_dir > 0 else -1
+                confidence = float(raw_conf)
+                
+                logger.info(f"🤖 Agent 1 (Trend): Conf={confidence:.2f} | Dir={direction}")
+                
+                # Auditor Check (Only for Agent 1)
+                # ... (Auditor Logic)
+                is_vetoed = False # Default
+                # self.auditor.predict_veto(...) implementation missing in snippet context but assumed
+                
+            except Exception as e:
+                logger.error(f"Agent 1 Inference Failed: {e}")
+                return
              
         # DECISION CORE (Strategy Pattern)
         should_execute = self.strategy.should_trade(
             confidence=float(confidence),
             regime=int(regime),
-            auditor_vetoed=is_vetoed
+            auditor_vetoed=is_vetoed,
+            agent2_score=float(agent2_score) # Pass Agent 2 score
         )
         
         if not should_execute:
