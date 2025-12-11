@@ -68,11 +68,19 @@ class RegimeDetector:
         new_means = np.array(self.model.means_[sorted_idx])
         new_covars = np.array(self.model.covars_[sorted_idx])
         
-        # Atomic Assignment
+        # Atomic Assignment (Bypassing Setters to avoid validation glitch)
         self.model.startprob_ = new_startprob
         self.model.transmat_ = new_transmat
-        self.model.means_ = new_means
-        self.model.covars_ = new_covars
+        
+        # hmmlearn 0.2.8+ uses properties for means/covars
+        # We set private attributes directly to avoid 'ValueError' during sort
+        if hasattr(self.model, "_means_"):
+            self.model._means_ = new_means
+            self.model._covars_ = new_covars
+        else:
+            # Fallback for older versions
+            self.model.means_ = new_means
+            self.model.covars_ = new_covars
         
         # Analyze states (After Sort)
         for i in range(self.n_components):
