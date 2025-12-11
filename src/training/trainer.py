@@ -64,7 +64,7 @@ class Trainer:
         # Scheduler (Dynamic Correction)
         # Reduces LR if Val Loss doesn't improve for 5 epochs
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode='min', factor=0.5, patience=5, verbose=True
+            self.optimizer, mode='min', factor=0.5, patience=5
         )
 
     def train(self, train_loader: DataLoader, val_loader: DataLoader, epochs: int = 10):
