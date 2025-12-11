@@ -58,7 +58,8 @@ class MetaAuditor:
         self.is_fitted = True
         
         # Save
-        self.model.save_model(str(self.model_path))
+        # Save using underlying booster to avoid sklearn compatibility issues
+        self.model.get_booster().save_model(str(self.model_path))
         logger.info(f"Auditor saved to {self.model_path}")
 
     def predict_veto(self, X_features: pd.DataFrame, primary_pred_prob: pd.Series, primary_pred_side: pd.Series, threshold: float = 0.6) -> pd.Series:
