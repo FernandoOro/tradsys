@@ -16,7 +16,7 @@ from tqdm import tqdm
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.config import config
-from src.models.agents.resnet import ResNetAgent
+from src.models.agents.resnet import ResNetAgent, ResNetAutoEncoder
 from src.models.regime.hmm import RegimeDetector
 
 # Configure Logging
@@ -179,6 +179,52 @@ def train(args):
     model = ResNetAgent(input_dim=input_dim, hidden_dim=args.hidden_dim, num_blocks=args.blocks).to(device)
     logger.info(f"Model Initialized: ResNet {args.blocks} Blocks, Input {input_dim}")
     
+    # --- PRE-TRAINING (AutoEncoder) ---
+    if args.pretrain:
+        logger.info("⚡ Starting DAE Pre-training (Denoising Autoencoder)...")
+        ae = ResNetAutoEncoder(input_dim=input_dim, hidden_dim=args.hidden_dim, num_blocks=args.blocks).to(device)
+        ae_opt = optim.AdamW(ae.parameters(), lr=1e-3)
+        ae_crit = nn.MSELoss()
+        
+        for epoch in range(20): # 20 Epochs enough for DAE usually
+            ae.train()
+            train_loss = 0
+            for X, _ in train_loader: # Ignore labels
+                X = X.to(device)
+                ae_opt.zero_grad()
+                out = ae(X)
+                # Input reconstruction (compare to clean X)
+                # (forward adds noise internally)
+                loss = ae_crit(out, X) 
+                loss.backward()
+                ae_opt.step()
+                train_loss += loss.item()
+            if (epoch+1) % 5 == 0:
+                logger.info(f"DAE Epoch {epoch+1}/20 | Recon Loss: {train_loss/len(train_loader):.6f}")
+        
+        # Transfer Weights to Agent
+        logger.info("Transferring Pre-trained Encoder weights to Agent...")
+        # Dictionary Copy
+        agent_dict = model.state_dict()
+        ae_dict = ae.state_dict()
+        
+        # Filter matching keys (Encoder parts)
+        # ResNetAgent keys: input_proj.weight, blocks.0...
+        # ResNetAE keys: encoder_proj.weight, encoder_blocks.0...
+        # Need manual mapping or stricter naming.
+        # Simple fix: Iterate and copy if shape matches and name corresponds.
+        
+        # Manual Copy for safety
+        model.input_proj.weight.data = ae.encoder_proj.weight.data.clone()
+        model.input_proj.bias.data = ae.encoder_proj.bias.data.clone()
+        model.bn_in.weight.data = ae.bn_enc.weight.data.clone()
+        model.bn_in.bias.data = ae.bn_enc.bias.data.clone()
+        
+        for i in range(args.blocks):
+            model.blocks[i].load_state_dict(ae.encoder_blocks[i].state_dict())
+            
+        logger.info("Weights Transferred. Encoder is primed.")
+    
     optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
     criterion = nn.BCEWithLogitsLoss() # Use Binary Cross Entropy for Direction (Target 0/1)
     
@@ -235,6 +281,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--hidden_dim", type=int, default=128)
     parser.add_argument("--blocks", type=int, default=4)
+    parser.add_argument("--pretrain", action="store_true", help="Enable DAE Pre-training")
     
     args = parser.parse_args()
     train(args)
