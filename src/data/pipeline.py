@@ -42,10 +42,24 @@ class DataPipeline:
         time_cols = ['hour_sin', 'hour_cos', 'day_sin', 'day_cos']
         exclude = time_cols + ['open', 'high', 'low', 'close', 'volume', 'target'] # Removed datetime
         
-        # 3b. Generate Target (Simple Next Step Direction)
-        # 1 = Up, 0 = Down/Flat
-        df['target'] = np.where(df['close'].shift(-1) > df['close'], 1, 0)
-        df.dropna(inplace=True) # Drop last row which has no target (though shift(-1) leaves one NaN)
+        # 3b. Generate Target (Triple Barrier Method) - The "Gold Standard"
+        # 1 = Hit Upper Barrier (Profit), 0 = Hit Lower (Stop Loss) or Time Out (Flat)
+        # To keep it binary for now: Map 1->1, (-1, 0)->0. Or Drop 0s.
+        
+        logger.info("Step 2b: Generating Triple Barrier Labels...")
+        from src.data.labeling import Labeler
+        labeler = Labeler(barrier_width=1.5, time_horizon=24) # 1.5 ATR safety
+        df = labeler.run(df)
+        
+        # Mapping: TBM returns -1 (down), 0 (vertical), 1 (up)
+        # Current Model is Binary (1=Long, 0=Rest).
+        # Strategy: Predict Long Opportunities only.
+        df['target'] = np.where(df['target_class'] == 1, 1, 0)
+        
+        # Optional: Use sample_weights provided by Labeler
+        # df['sample_weight'] is now available!
+        
+        df.dropna(inplace=True)
         
         # Apply normalization to all numeric except exclusions
         df_norm = self.normalizer.apply_normalization(df, exclude_cols=exclude)
