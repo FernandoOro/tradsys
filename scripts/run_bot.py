@@ -147,9 +147,10 @@ class TradingBot:
         
         logger.info(f"Alpha: Dir={direction:.2f}, Conf={confidence:.2f}")
 
-        # SNIPER THRESHOLD (Winning Backtest Logic)
-        if confidence < 0.95:
-             logger.info(f"💤 Low Confidence ({confidence:.2f} < 0.95). Skipping.")
+        # SNIPER THRESHOLD (Optimized via Comparative Backtest)
+        # 0.75 allows more trades, while Auditor filters bad ones.
+        if confidence < 0.75:
+             logger.info(f"💤 Low Confidence ({confidence:.2f} < 0.75). Skipping.")
              return
 
         # META-AUDIT
