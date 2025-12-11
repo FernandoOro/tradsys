@@ -62,11 +62,17 @@ class RegimeDetector:
         sorted_idx = np.argsort(state_vol_means)
         logger.info(f"Sorting States by Volatility: {sorted_idx}")
         
-        # Reorder Model Parameters
-        self.model.startprob_ = self.model.startprob_[sorted_idx]
-        self.model.transmat_ = self.model.transmat_[sorted_idx, :][:, sorted_idx]
-        self.model.means_ = self.model.means_[sorted_idx]
-        self.model.covars_ = self.model.covars_[sorted_idx]
+        # Prepare Reordered Parameters (Copying to avoid view issues)
+        new_startprob = np.array(self.model.startprob_[sorted_idx])
+        new_transmat = np.array(self.model.transmat_[sorted_idx, :][:, sorted_idx])
+        new_means = np.array(self.model.means_[sorted_idx])
+        new_covars = np.array(self.model.covars_[sorted_idx])
+        
+        # Atomic Assignment
+        self.model.startprob_ = new_startprob
+        self.model.transmat_ = new_transmat
+        self.model.means_ = new_means
+        self.model.covars_ = new_covars
         
         # Analyze states (After Sort)
         for i in range(self.n_components):
