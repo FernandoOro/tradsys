@@ -148,9 +148,13 @@ class Tuner:
             return float('inf')
 
     def run_optimization(self):
+        # Advanced Strategy: Multivariate TPE
+        # This allows Optuna to learn correlations (e.g., "Larger d_model needs higher Dropout")
+        sampler = optuna.samplers.TPESampler(multivariate=True, seed=42)
+        
         # MedianPruner: Prune if intermediate result is worse than median of intermediate results of previous trials at the same step.
-        study = optuna.create_study(direction="minimize", pruner=optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=5))
-        logger.info("Starting PRECISION Optimization Study (Zoom-In)...")
+        study = optuna.create_study(direction="minimize", sampler=sampler, pruner=optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=5))
+        logger.info("Starting PRECISION Optimization Study (Zoom-In + Multivariate TPE)...")
         study.optimize(self.objective, n_trials=self.n_trials)
         
         logger.info(f"Best Params: {study.best_params}")
