@@ -140,27 +140,15 @@ def run_backtest():
         
         # PCA -> HMM
         latent_val = pca_model.transform(embeddings)
-        states = hmm_model.predict(latent_val)
+        hmm_states = hmm_model.predict(latent_val)
         
-        # Match length
-        valid_df['regime'] = states
-        
-        # Analyze Regimes
-        for r in range(hmm_model.n_components):
-            r_mask = (valid_df['regime'] == r)
-            r_ret = valid_df.loc[r_mask, 'close'].pct_change().mean() * 10000 # prox
-            logger.info(f"Regime {r}: {r_mask.sum()} bars.")
+        # Analyze Regimes (Delayed until valid_df creation)
             
     else:
         logger.warning("Latent HMM not found. Running without filter.")
-        valid_df['regime'] = 1 
+        hmm_states = None
     
     # Inference
-    # (Existing inference loop was used above, but we need predictions too. 
-    #  We used the loader for embeddings. We can re-use the loader or predict in the same loop?
-    #  Predictor.predict calls model(x,t). 
-    #  Let's just run the standard inference loop separately to avoid messing up logic flow, reasonable cost.)
-    
     all_probs = []
     logger.info("Running Batch Inference (PyTorch)...")
     for batch_x, batch_t in tqdm(loader, desc="Predictions"):
@@ -170,20 +158,35 @@ def run_backtest():
     all_probs = np.array(all_probs)
     
     # Alignment
+    valid_df = df_val.iloc[seq_len:].copy()
     valid_df['pred_score'] = all_probs
+    
+    # Assign HMM States if available
+    if hmm_states is not None:
+        valid_df['regime'] = hmm_states
+        
+        # Print Stats per Regime
+        print("\n=== HMM REGIME ANALYSIS ===")
+        for r in sorted(valid_df['regime'].unique()):
+            mask = valid_df['regime'] == r
+            r_ret = valid_df.loc[mask, 'close'].pct_change().mean() * 10000 # bps
+            count = mask.sum()
+            print(f"Regime {r}: {count} bars | Mean Return (bps): {r_ret:.4f}")
+        print("===========================\n")
+    else:
+        valid_df['regime'] = 1 
     
     # Signal Logic
     THRESHOLD = 0.85
     
     # DYNAMIC REGIME FILTERING (Experimental)
-    # We don't know which state is 'Bad'. 
-    # Strategy: For this backtest, allow ALL regimes, but print performance per regime.
-    # User can then restrict 'regime != X' in next run.
+    # Based on training log: State 2 had High Variance (Confusion).
+    # We suspect State 2 is the bad one.
     regime_condition = True 
-    
-    if 'regime' in valid_df.columns:
-         # Calculate basic stats per regime to help user decide
-         pass
+    if 'regime' in valid_df.columns and hmm_states is not None:
+        # Assuming State 2 is the confused one (User can change this after seeing logs)
+        # For now, let's NOT filter, just observe.
+        pass
 
     buy_signal = (valid_df['pred_score'] > THRESHOLD) & regime_condition
     sell_signal = (valid_df['pred_score'] < 0.0)
