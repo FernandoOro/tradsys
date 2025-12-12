@@ -110,26 +110,17 @@ def run_backtest():
     predictor = ContrastivePredictor(model_path, input_dim=feat_dim)
     
     # Contrastive HMM Logic
-    # DEBUG: Disabling HMM to verify baseline (92 trades vs 8715)
-    # Restore true path later
-    hmm_path = config.MODELS_DIR / "hmm_contrastive_DISABLED.pkl" 
+    hmm_path = config.MODELS_DIR / "hmm_contrastive.pkl" 
     pca_path = config.MODELS_DIR / "pca_contrastive.pkl"
     
+    hmm_states = None
     if hmm_path.exists() and pca_path.exists():
-        logger.info("Loading Latent HMM & PCA...")
+        logger.info(f"Loading Latent HMM from {hmm_path}...")
         hmm_model = joblib.load(hmm_path)
         pca_model = joblib.load(pca_path)
         
-        # We need to extract embeddings for valid_df
-        # Re-create dataset for inference just like before
-        # But we need the embeddings this time, not just predictions
-        # Predictor doesn't return embeddings. 
-        # We need to access model definition. Predictor has `self.model`.
-        
-        # Let's extract embeddings for the whole validation set
+        # We need to extract embeddings check
         logger.info("Extracting Embeddings for Regime Detection...")
-        
-        # Re-use loader
         embeddings = []
         with torch.no_grad():
              for batch_x, batch_t in tqdm(loader, desc="Embeddings"):
@@ -137,26 +128,20 @@ def run_backtest():
                  batch_t = batch_t.to(predictor.device)
                  emb = predictor.model.extract_features(batch_x, batch_t)
                  embeddings.append(emb.cpu().numpy())
-        
         embeddings = np.concatenate(embeddings, axis=0)
         
         # PCA -> HMM
         latent_val = pca_model.transform(embeddings)
         hmm_states = hmm_model.predict(latent_val)
-        
-        # Analyze Regimes (Delayed until valid_df creation)
-            
     else:
         logger.warning("Latent HMM not found. Running without filter.")
-        hmm_states = None
-    
+
     # Inference
     all_probs = []
     logger.info("Running Batch Inference (PyTorch)...")
     for batch_x, batch_t in tqdm(loader, desc="Predictions"):
         preds = predictor.predict(batch_x.numpy(), batch_t.numpy())
         all_probs.extend(preds['direction'])
-    
     all_probs = np.array(all_probs)
     
     # Alignment
@@ -165,20 +150,52 @@ def run_backtest():
     
     # DEBUG: Prediction Stats
     logger.info(f"Prediction Stats: Min={all_probs.min():.4f}, Max={all_probs.max():.4f}, Mean={all_probs.mean():.4f}, Std={all_probs.std():.4f}")
-    logger.info(f"Samples > 0.85: {np.sum(all_probs > 0.85)} / {len(all_probs)}")
     
-    # Assign HMM States if available
+    # Assign HMM States
     if hmm_states is not None:
         valid_df['regime'] = hmm_states
         
-        # Print Stats per Regime
-        print("\n=== HMM REGIME ANALYSIS ===")
+        # --- PER REGIME STRATEGY ANALYSIS ---
+        print("\n" + "="*50)
+        print("       HMM LATENT REGIME PERFORMANCE")
+        print("="*50)
+        print(f"{'Regime':<8} | {'Bars':<6} | {'Mkt Ret':<10} | {'Win Rate':<10} | {'Strat PnL':<10}")
+        print("-" * 50)
+        
         for r in sorted(valid_df['regime'].unique()):
             mask = valid_df['regime'] == r
-            r_ret = valid_df.loc[mask, 'close'].pct_change().mean() * 10000 # bps
-            count = mask.sum()
-            print(f"Regime {r}: {count} bars | Mean Return (bps): {r_ret:.4f}")
-        print("===========================\n")
+            subset = valid_df[mask].copy()
+            
+            # 1. Market Context
+            mkt_ret = subset['close'].pct_change().mean() * 10000 # bps
+            
+            # 2. Strategy Performance (Hypothetical)
+            # Buy if score > 0.85
+            sigs = subset['pred_score'] > 0.85
+            if sigs.sum() > 0:
+                # Simple Next-Bar Return approximation
+                # We need real future return. 
+                # Let's use the 'target' column as proxy for direction correctness?
+                # Target is 1 if Price Up, 0 if Price Down in next horizon.
+                # Win = (Pred > 0.85) AND (Target == 1)
+                
+                wins = ((subset['pred_score'] > 0.85) & (subset['target'] > 0.5)).sum()
+                trades = sigs.sum()
+                wr = (wins / trades) * 100
+                
+                # Approx PnL: Sum of (Next Ret) where Trade=1
+                # We don't have explicit 'next_ret' col easily without strict shift.
+                # VectorBT calculates it exactly later. 
+                # For now, Win Rate is the best proxy.
+                strat_pnl = "N/A"
+            else:
+                wr = 0.0
+                trades = 0
+                strat_pnl = "0"
+            
+            print(f"{r:<8} | {mask.sum():<6} | {mkt_ret:<10.2f} | {wr:<10.1f}% | {trades} trades")
+            
+        print("="*50 + "\n")
     else:
         valid_df['regime'] = 1 
     
