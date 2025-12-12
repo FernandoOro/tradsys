@@ -134,6 +134,16 @@ class Tuner:
         study = optuna.create_study(direction="minimize")
         logger.info("Starting Optimization Study with PURGED CV...")
         study.optimize(self.objective, n_trials=self.n_trials)
+        
+        logger.info(f"Best Params: {study.best_params}")
+        
+        # Save Best Params
+        import json
+        out_path = config.MODELS_DIR / "best_params.json"
+        with open(out_path, "w") as f:
+            json.dump(study.best_params, f, indent=4)
+        logger.info(f"Saved best params to {out_path}")
+            
         return study.best_params
 
 if __name__ == "__main__":
