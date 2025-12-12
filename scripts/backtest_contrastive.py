@@ -291,7 +291,12 @@ def run_backtest():
     vol_filter = dynamic_tp_pct > min_vol_threshold
     
     logger.info(f"Applying Volatility Filter (Min TP > {min_vol_threshold*100:.2f}%)...")
-    valid_df['signal_trade'] = valid_df['signal_trade'] & vol_filter
+    
+    # CRITICAL FIX: Do NOT use bitwise & on (-1, 0, 1) signals.
+    # It converts -1 (Sell) into 1 (Buy) because (-1 & True) == 1.
+    # We only want to cancel BUYS if volatility is low.
+    mask_cancel_buy = (valid_df['signal_trade'] == 1) & (~vol_filter)
+    valid_df.loc[mask_cancel_buy, 'signal_trade'] = 0
     
     logger.info(f"Avg ATR%: {atr_pct.mean()*100:.2f}% | Avg TP%: {dynamic_tp_pct.mean()*100:.2f}%")
     logger.info(f"Trades AFTER Vol Filter: {np.sum(valid_df['signal_trade'] == 1)}")
