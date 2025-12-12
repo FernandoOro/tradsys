@@ -210,6 +210,8 @@ def run_backtest():
         valid_df['regime'] = 1 
         regime_condition = True
 
+    # Signal Logic
+    THRESHOLD = 0.85
     buy_signal = (valid_df['pred_score'] > THRESHOLD) & regime_condition
 
     buy_signal = (valid_df['pred_score'] > THRESHOLD) & regime_condition
