@@ -184,9 +184,12 @@ def run_backtest():
             
         print("="*50 + "\n")
         
-        # FILTER STRATEGY: Regime 2 Only + High Threshold
-        logger.info("Applying Filter: KEEP ONLY REGIME 2 ")
-        regime_condition = (valid_df['regime'] == 2)
+        
+        # FILTER STRATEGY: Regime 0 (High Confidence)
+        # Regime 0 showed 90% accuracy in direction.
+        # Regime 2 dropped to 53% with high threshold.
+        logger.info("Applying Filter: KEEP ONLY REGIME 0 (High Accuracy)")
+        regime_condition = (valid_df['regime'] == 0)
         
     else:
         valid_df['regime'] = 1 
@@ -198,8 +201,8 @@ def run_backtest():
     
     # Sell Logic:
     # 1. Bearish Prediction (< 0.0)
-    # 2. Leaving the Goldilocks Regime (Safety Exit)
-    sell_signal = (valid_df['pred_score'] < 0.0) | (valid_df['regime'] != 2)
+    # 2. Leaving the Regime (Safety Exit)
+    sell_signal = (valid_df['pred_score'] < 0.0) | (valid_df['regime'] != 0)
     
     conditions = [buy_signal, sell_signal]
     choices = [1, -1]
