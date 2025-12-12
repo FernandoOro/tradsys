@@ -80,7 +80,7 @@ class ContrastiveSimulator:
         self.fees = fees
         self.slippage = slippage
         
-    def run_backtest(self, close_price: pd.Series, signals: pd.Series, sl_stop=None, tp_stop=None):
+    def run_backtest(self, close_price: pd.Series, open_price=None, high_price=None, low_price=None, signals=None, sl_stop=None, tp_stop=None):
         entries = signals == 1
         # If SL/TP is used, we disable 'exits' based on signal, 
         # unless signal is explicitly -1 (which we might keep for Safety Exit)
@@ -88,10 +88,14 @@ class ContrastiveSimulator:
         
         logger.info(f"Running Contrastive Simulation (SL={sl_stop}, TP={tp_stop})...")
         
+        # Use OHLC for accurate SL/TP hit detection (Wicks)
         portfolio = vbt.Portfolio.from_signals(
             close_price,
             entries,
             exits,
+            high=high_price,
+            low=low_price,
+            open=open_price,
             fees=self.fees,
             slippage=self.slippage,
             init_cash=10000,
@@ -259,8 +263,11 @@ def run_backtest():
     # We hold until hit.
     sim = ContrastiveSimulator(fees=0.001, slippage=0.0005)
     portfolio, stats = sim.run_backtest(
-        valid_df['close'], 
-        valid_df['signal_trade'],
+        close_price=valid_df['close'],
+        open_price=valid_df['open'],
+        high_price=valid_df['high'],
+        low_price=valid_df['low'],
+        signals=valid_df['signal_trade'],
         sl_stop=0.01,
         tp_stop=0.02
     )
