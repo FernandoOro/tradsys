@@ -196,20 +196,21 @@ def run_backtest():
             print(f"{r:<8} | {mask.sum():<6} | {mkt_ret:<10.2f} | {wr:<10.1f}% | {trades} trades")
             
         print("="*50 + "\n")
+        
+        # FILTER STRATEGY
+        # Based on previous analysis:
+        # Regime 0: "Saturation" (Always Buy, High Volatility Risk)
+        # Regime 1: "Fear" (Never Buy)
+        # Regime 2: "Goldilocks" (Selective, 67% Win Rate)
+        
+        logger.info("Applying Filter: KEEP ONLY REGIME 2 ")
+        regime_condition = (valid_df['regime'] == 2)
+        
     else:
         valid_df['regime'] = 1 
-    
-    # Signal Logic
-    THRESHOLD = 0.85
-    
-    # DYNAMIC REGIME FILTERING (Experimental)
-    # Based on training log: State 2 had High Variance (Confusion).
-    # We suspect State 2 is the bad one.
-    regime_condition = True 
-    if 'regime' in valid_df.columns and hmm_states is not None:
-        # Assuming State 2 is the confused one (User can change this after seeing logs)
-        # For now, let's NOT filter, just observe.
-        pass
+        regime_condition = True
+
+    buy_signal = (valid_df['pred_score'] > THRESHOLD) & regime_condition
 
     buy_signal = (valid_df['pred_score'] > THRESHOLD) & regime_condition
     sell_signal = (valid_df['pred_score'] < 0.0)
