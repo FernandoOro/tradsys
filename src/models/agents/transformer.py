@@ -100,6 +100,29 @@ class TransformerAgent(nn.Module):
         # Return concatenated vector [direction, confidence]
         return torch.cat([direction, confidence], dim=1)
 
+    def extract_features(self, x_features: torch.Tensor, x_time: torch.Tensor) -> torch.Tensor:
+        """
+        Extracts the latent representation (Last Token) BEFORE the heads.
+        Used for Phase 28: Contrastive Learning (SupCon).
+        """
+        # Embeddings
+        emb_features = self.input_proj(x_features)
+        emb_time = self.time_embedding(x_time)
+        
+        # Combine
+        src = emb_features + emb_time
+        
+        # Positional Encoding
+        src = self.pos_encoder(src)
+        
+        # Transformer Pass
+        output = self.transformer_encoder(src)
+        
+        # Global Pooling (Last Token)
+        last_token = output[:, -1, :] 
+        
+        return last_token
+
 
 class PositionalEncoding(nn.Module):
     """

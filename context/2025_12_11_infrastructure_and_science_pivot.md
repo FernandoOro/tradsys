@@ -52,16 +52,17 @@ Use these settings for future runs. Do not revert to "Safe Mode" unless hardware
 For the next session, focus on:
 1.  **Feature Engineering**: The current set is basic (OHLCV + RSI/MACD). Add **Order Book Imbalance** or **Fractional Diff** features if enabled.
 2.  **Hyperparameter Tuning**: Re-run `src/optimization/tuner.py` targeting the new TBM dataset.
-### 6. Execution Workflow Protocol (CRITICAL)
+### 6. Execution Workflow Protocol (CRITICAL - READ THIS)
 > [!IMPORTANT]
 > **RULE: NO LOCAL EXECUTION of Training/Tuning Scripts.**
-> The local machine (fer @ linux) is for **CODE ONLY**. All heavy lifting happens on RunPod.
+> The local environment is for **CODE EDITING ONLY**. All heavy computations happen on RunPod.
+> **DO NOT try to use `docker exec` or `python` locally for training.**
 
-**Correct Workflow:**
-1.  **Code (Local)**: Edit `scripts/train_hmm.py`, `src/...`.
+**The Only Valid Workflow:**
+1.  **Code (Local)**: Edit `scripts/train_hmm.py`, `src/optimization/tuner.py`.
 2.  **Push (Local)**: `git add . && git commit -m "..." && git push`
 3.  **Pull (RunPod)**: `cd /workspace/tradsys && git pull`
-4.  **Execute (RunPod)**: `python scripts/train_hmm.py`
+4.  **Execute (RunPod)**: `python src/optimization/tuner.py`
 
 ### 7. Session Update: Advanced Strategy Implementation (2025-12-11)
 
@@ -147,3 +148,46 @@ To ensure long-term flexibility and enable scientific comparison, we refactored 
     2.  Run `scripts/compare_strategies.py`.
     3.  Set winner in `.env` (via `runpod_setup.sh`).
     4.  Deploy.
+
+### 11. Phase 27: Feature Selection & Precision Optimization (2025-12-11)
+
+**A. Feature Importance Analysis (XGBoost)**
+*   **Result**: The dataset is **"High Density / Low Noise"**.
+*   **Top Feature**: Volatility (10%).
+*   **Bottom Feature**: Log Returns (6.5%).
+*   **Decision**: Keep ALL features. No pruning required. The input vector is efficient.
+
+**B. Precision Hyperparameter Tuning (Zoom-In Strategy)**
+We ran a high-precision search (`multivariate=True`, 25 epochs) around the previous winner (Trial 31).
+
+| Metric | Baseline (Trial 31) | Challenger (Precision Best) | Delta |
+| :--- | :--- | :--- | :--- |
+| **Val Loss** | 0.5220 | 0.5211 | -0.0009 🔻 |
+| **Stability** | High | **Low** (Many NaNs) | ⚠️ |
+| **Config** | `d=128, L=2, h=4` | `d=128, L=4, h=2` | Deeper/Narrower |
+
+**Conclusion**:
+The "Challenger" model (4 layers) is marginally better but significantly more unstable (likely on the edge of gradient explosion due to depth).
+**Verdict**: The **Baseline (Trial 31)** remains the "Golden Config" for production due to its robust stability profile. The 0.0009 gain is not worth the risk of inference NaN.
+
+### 12. Next Major Leap: Macro-Context (Future)
+We identified that optimization has reached a plateau ("Micro-Optimization Ceiling").
+To break 0.50 loss, we need **New Information**, not just better parameters.
+*   **Proposal**: Inject external macro variables (DXY, NASDAQ, Gold).
+*   **Challenge**: Aligning 24/7 Crypto markets with 5/2 tradfi markets.
+*   **Plan**: Addressed in **Phase 29** (Macro Regime Supervisor).
+
+### 13. Phase 28: The Geometry of Alpha (Contrastive Learning)
+**Date**: 2025-12-11
+**Objective**: Break the "Optimization Ceiling" (Loss 0.52) using **Supervised Contrastive Learning (SupCon)**.
+
+**Hypothesis**:
+The current Focal Loss forces the model to memorize "Up/Down" labels. A geometric approach (SupCon) will force the model to cluster profitable states together on a hypersphere, creating a more robust signal representation that resists market noise.
+
+**Implementation (Additive Only)**:
+*   `src/training/losses.py`: Added `SupervisedContrastiveLoss`.
+*   `src/training/contrastive_trainer.py`: Added 2-step trainer (SupCon -> Linear Probe).
+*   `scripts/train_contrastive.py`: New isolated experiment script.
+*   **Safety**: Production `train.py` remains untouched.
+
+**Status**: 🚀 Implementation Complete. Ready for RunPod Execution.
