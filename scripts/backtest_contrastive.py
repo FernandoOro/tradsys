@@ -258,9 +258,22 @@ def run_backtest():
     logger.info(f"Trades Generated (Entry Signals): {np.sum(valid_df['signal_trade'] == 1)}")
     
     # Sim
-    # Using SL=1% and TP=2% (Risk Ratio 1:2)
-    # TBM training used 1.5 ATR, which is rarely hit in 1 bar.
-    # We hold until hit.
+    # ALIGNMENT: Use Dynamic Volatility-based SL/TP (Same as TBM Training)
+    # TBM Labeler used 1.5 * volatility (horizon 24).
+    # If we use fixed 2%, we ask for too much if Vol is low.
+    
+    # Calculate Volatility (Proxy for ATR)
+    # Use 24h rolling std dev of returns
+    returns = valid_df['close'].pct_change()
+    vol_24h = returns.rolling(window=24).std()
+    vol_24h = vol_24h.bfill().fillna(0.01) # Fallback to 1% if NaN
+    
+    # Dynamic Stops
+    dynamic_tp = vol_24h * 1.5
+    dynamic_sl = vol_24h * 1.5
+    
+    logger.info(f"Avg Volatility: {vol_24h.mean():.4f} | Avg TP: {dynamic_tp.mean():.4f}")
+
     sim = ContrastiveSimulator(fees=0.001, slippage=0.0005)
     portfolio, stats = sim.run_backtest(
         close_price=valid_df['close'],
@@ -268,8 +281,8 @@ def run_backtest():
         high_price=valid_df['high'],
         low_price=valid_df['low'],
         signals=valid_df['signal_trade'],
-        sl_stop=0.01,
-        tp_stop=0.02
+        sl_stop=dynamic_sl,
+        tp_stop=dynamic_tp
     )
     
     print("\n" + "="*40)
