@@ -213,9 +213,11 @@ def run_backtest():
     # Signal Logic
     THRESHOLD = 0.85
     buy_signal = (valid_df['pred_score'] > THRESHOLD) & regime_condition
-
-    buy_signal = (valid_df['pred_score'] > THRESHOLD) & regime_condition
-    sell_signal = (valid_df['pred_score'] < 0.0)
+    
+    # Sell Logic:
+    # 1. Bearish Prediction (< 0.0)
+    # 2. Leaving the Goldilocks Regime (Safety Exit)
+    sell_signal = (valid_df['pred_score'] < 0.0) | (valid_df['regime'] != 2)
     
     conditions = [buy_signal, sell_signal]
     choices = [1, -1]
