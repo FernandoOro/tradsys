@@ -67,7 +67,8 @@ class Trainer:
             self.optimizer, mode='min', factor=0.5, patience=5
         )
 
-    def train(self, train_loader: DataLoader, val_loader: DataLoader, epochs: int = 10):
+    def train(self, train_loader: DataLoader, val_loader: DataLoader, epochs: int = 10, trial=None):
+        import optuna # Local import to avoid circular dependency
         best_val_loss = float('inf')
         
         for epoch in range(epochs):
@@ -132,6 +133,12 @@ class Trainer:
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 torch.save(self.model.state_dict(), config.MODELS_DIR / "agent1_best.pth")
+                
+            # OPTUNA PRUNING CHECK
+            if trial:
+                trial.report(val_loss, epoch)
+                if trial.should_prune():
+                    raise optuna.TrialPruned()
                 
     def validate(self, val_loader: DataLoader) -> float:
         self.model.eval()

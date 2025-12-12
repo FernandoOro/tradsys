@@ -114,15 +114,16 @@ class Tuner:
                  train_ds = TensorDataset(xt_fold, tt_fold, yt_fold)
                  val_ds = TensorDataset(xv_fold, tv_fold, yv_fold)
                  
-                 train_loader = DataLoader(train_ds, batch_size=32, shuffle=True)
-                 val_loader = DataLoader(val_ds, batch_size=32)
+                 train_loader = DataLoader(train_ds, batch_size=1024, shuffle=True, num_workers=4, pin_memory=True)
+                 val_loader = DataLoader(val_ds, batch_size=1024, num_workers=4, pin_memory=True)
                  
                  # Model Init
                  model = TransformerAgent(input_dim=feat_dim, d_model=d_model, nhead=nhead, num_layers=num_layers, dropout=dropout)
                  trainer = Trainer(model, lr=lr)
                  
-                 # Train (Short)
-                 trainer.train(train_loader, val_loader, epochs=2)
+                 # Train (Short but sufficient for Pruning)
+                 # Increased to 10 epochs (Pruning will kill bad ones early)
+                 trainer.train(train_loader, val_loader, epochs=10, trial=trial)
                  
                  # Score (Validation Loss)
                  val_loss = trainer.validate(val_loader)
@@ -136,8 +137,10 @@ class Tuner:
             return float('inf')
 
     def run_optimization(self):
-        study = optuna.create_study(direction="minimize")
-        logger.info("Starting Optimization Study with PURGED CV...")
+        # MedianPruner: Prune if intermediate result is worse than median of intermediate results of previous trials at the same step.
+        # Warmup=2 means don't prune until epoch 2.
+        study = optuna.create_study(direction="minimize", pruner=optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=2))
+        logger.info("Starting Optimization Study with PURGED CV + MedianPruning...")
         study.optimize(self.objective, n_trials=self.n_trials)
         
         logger.info(f"Best Params: {study.best_params}")
@@ -153,5 +156,6 @@ class Tuner:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    tuner = Tuner(n_trials=5)
+    # Increased trials because pruning makes them cheaper
+    tuner = Tuner(n_trials=50) 
     tuner.run_optimization()
