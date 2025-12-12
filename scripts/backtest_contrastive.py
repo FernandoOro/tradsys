@@ -163,6 +163,10 @@ def run_backtest():
     valid_df = df_val.iloc[seq_len:].copy()
     valid_df['pred_score'] = all_probs
     
+    # DEBUG: Prediction Stats
+    logger.info(f"Prediction Stats: Min={all_probs.min():.4f}, Max={all_probs.max():.4f}, Mean={all_probs.mean():.4f}, Std={all_probs.std():.4f}")
+    logger.info(f"Samples > 0.85: {np.sum(all_probs > 0.85)} / {len(all_probs)}")
+    
     # Assign HMM States if available
     if hmm_states is not None:
         valid_df['regime'] = hmm_states
