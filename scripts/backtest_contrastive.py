@@ -296,14 +296,16 @@ def run_backtest():
     logger.info(f"Avg ATR%: {atr_pct.mean()*100:.2f}% | Avg TP%: {dynamic_tp_pct.mean()*100:.2f}%")
     logger.info(f"Trades AFTER Vol Filter: {np.sum(valid_df['signal_trade'] == 1)}")
 
-    # LAB TEST: Zero Fees, Zero Slippage
-    # Purpose: Prove Alpha existence.
+    # LAB TEST: Zero Fees, Zero Slippage, CLOSE-ONLY (Match Labeler Physics)
+    # The Labeler used Close prices to determine Barrier Hits.
+    # The OHLC Backtest gets stopped out by Wicks that the Labeler ignored.
+    # To prove the Model works on its own terms, we must simulate "Close-Only" execution.
     sim = ContrastiveSimulator(fees=0.0, slippage=0.0)
     portfolio, stats = sim.run_backtest(
         close_price=valid_df['close'],
-        open_price=valid_df['open'],
-        high_price=valid_df['high'],
-        low_price=valid_df['low'],
+        open_price=None, # Disable OHLC
+        high_price=None, # Disable OHLC
+        low_price=None,  # Disable OHLC
         signals=valid_df['signal_trade'],
         sl_stop=dynamic_sl_pct,
         tp_stop=dynamic_tp_pct
