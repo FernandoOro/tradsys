@@ -258,21 +258,34 @@ def run_backtest():
     logger.info(f"Trades Generated (Entry Signals): {np.sum(valid_df['signal_trade'] == 1)}")
     
     # Sim
-    # ALIGNMENT: Use Dynamic Volatility-based SL/TP (Same as TBM Training)
-    # TBM Labeler used 1.5 * volatility (horizon 24).
-    # If we use fixed 2%, we ask for too much if Vol is low.
+    # ALIGNMENT: Use ATR-based SL/TP (Same as TBM Training)
+    # TBM Labeler used 1.5 * ATR.
     
-    # Calculate Volatility (Proxy for ATR)
-    # Use 24h rolling std dev of returns
-    returns = valid_df['close'].pct_change()
-    vol_24h = returns.rolling(window=24).std()
-    vol_24h = vol_24h.bfill().fillna(0.01) # Fallback to 1% if NaN
+    # Calculate ATR (True Range)
+    high_low = valid_df['high'] - valid_df['low']
+    high_close = np.abs(valid_df['high'] - valid_df['close'].shift())
+    low_close = np.abs(valid_df['low'] - valid_df['close'].shift())
+    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+    atr = tr.rolling(window=14).mean().bfill()
+    
+    # Convert ATR to Percentage for VectorBT
+    atr_pct = atr / valid_df['close']
     
     # Dynamic Stops
-    dynamic_tp = vol_24h * 1.5
-    dynamic_sl = vol_24h * 1.5
+    dynamic_tp_pct = atr_pct * 1.5
+    dynamic_sl_pct = atr_pct * 1.5
     
-    logger.info(f"Avg Volatility: {vol_24h.mean():.4f} | Avg TP: {dynamic_tp.mean():.4f}")
+    # VOLATILITY FILTER:
+    # If Expectation (TP) < Fees * 2 (0.2% * 2 = 0.4%), we lose money even if we win.
+    # Let's say we need at least 0.3% projected move to cover fees + slippage.
+    min_vol_threshold = 0.003 
+    vol_filter = dynamic_tp_pct > min_vol_threshold
+    
+    logger.info(f"Applying Volatility Filter (Min TP > {min_vol_threshold*100:.2f}%)...")
+    valid_df['signal_trade'] = valid_df['signal_trade'] & vol_filter
+    
+    logger.info(f"Avg ATR%: {atr_pct.mean()*100:.2f}% | Avg TP%: {dynamic_tp_pct.mean()*100:.2f}%")
+    logger.info(f"Trades AFTER Vol Filter: {np.sum(valid_df['signal_trade'] == 1)}")
 
     sim = ContrastiveSimulator(fees=0.001, slippage=0.0005)
     portfolio, stats = sim.run_backtest(
@@ -281,8 +294,8 @@ def run_backtest():
         high_price=valid_df['high'],
         low_price=valid_df['low'],
         signals=valid_df['signal_trade'],
-        sl_stop=dynamic_sl,
-        tp_stop=dynamic_tp
+        sl_stop=dynamic_sl_pct,
+        tp_stop=dynamic_tp_pct
     )
     
     print("\n" + "="*40)
