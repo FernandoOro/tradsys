@@ -48,7 +48,8 @@ def analyze_features():
     # Normalize
     # Note: XGBoost doesn't strictly need normalization, but we do it to match the Agent's view
     time_cols = ['hour_sin', 'hour_cos', 'day_sin', 'day_cos']
-    exclude = time_cols + ['open', 'high', 'low', 'close', 'volume', 'target', 'target_class']
+    # CRITICAL FIX: Exclude 'target_ret' (Leakage) and 'sample_weight'
+    exclude = time_cols + ['open', 'high', 'low', 'close', 'volume', 'target', 'target_class', 'target_ret', 'sample_weight']
     df_norm = normalizer.apply_normalization(df, exclude_cols=exclude)
     
     # Select Features
