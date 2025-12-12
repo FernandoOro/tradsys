@@ -285,9 +285,9 @@ def run_backtest():
     dynamic_sl_pct = atr_pct * 1.5
     
     # VOLATILITY FILTER:
-    # If Expectation (TP) < Fees * 2 (0.2% * 2 = 0.4%), we lose money even if we win.
-    # Let's say we need at least 0.3% projected move to cover fees + slippage.
-    min_vol_threshold = 0.003 
+    # DISABLE for "Lab Test" (Zero Fee Verification)
+    # We want to see if the Model has Alpha in a vacuum.
+    min_vol_threshold = 0.000 
     vol_filter = dynamic_tp_pct > min_vol_threshold
     
     logger.info(f"Applying Volatility Filter (Min TP > {min_vol_threshold*100:.2f}%)...")
@@ -296,7 +296,9 @@ def run_backtest():
     logger.info(f"Avg ATR%: {atr_pct.mean()*100:.2f}% | Avg TP%: {dynamic_tp_pct.mean()*100:.2f}%")
     logger.info(f"Trades AFTER Vol Filter: {np.sum(valid_df['signal_trade'] == 1)}")
 
-    sim = ContrastiveSimulator(fees=0.001, slippage=0.0005)
+    # LAB TEST: Zero Fees, Zero Slippage
+    # Purpose: Prove Alpha existence.
+    sim = ContrastiveSimulator(fees=0.0, slippage=0.0)
     portfolio, stats = sim.run_backtest(
         close_price=valid_df['close'],
         open_price=valid_df['open'],
