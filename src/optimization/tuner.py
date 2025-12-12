@@ -30,15 +30,26 @@ class Tuner:
         """
         Optuna Objective Function.
         """
-        # 1. Sample Hyperparameters
-        d_model = trial.suggest_categorical("d_model", [32, 64, 128])
+        # 1. Sample Hyperparameters (Refined Search Space - Phase 27b)
+        # Zooming in around Best Trial 31 (d=128, layers=2, nhead=4, lr=3.8e-4)
+        
+        # Micro-search around 128
+        d_model = trial.suggest_categorical("d_model", [96, 128, 144, 192])
+        
+        # Heads needs to divide d_model.
+        # If d_model=128, heads can be 2, 4, 8.
+        # If d_model=96, heads can be 2, 4, 8 (96/8=12).
         nhead_options = [h for h in [2, 4, 8] if d_model % h == 0]
-        if not nhead_options: nhead_options = [1]
         nhead = trial.suggest_categorical("nhead", nhead_options)
         
-        num_layers = trial.suggest_int("num_layers", 1, 4)
-        lr = trial.suggest_float("lr", 1e-5, 1e-3, log=True)
-        dropout = trial.suggest_float("dropout", 0.1, 0.5)
+        # Layers: Best was 2. Let's verify 2 vs 3 deeper.
+        num_layers = trial.suggest_int("num_layers", 2, 4)
+        
+        # LR: Best was 3.79e-4. Let's search linearly in that neighborhood.
+        lr = trial.suggest_float("lr", 1e-4, 6e-4) # Linear scale now for precision
+        
+        # Dropout: Best was 0.12. Search low range.
+        dropout = trial.suggest_float("dropout", 0.05, 0.20)
         
         # 2. Setup Data (Real Data)
         train_path = config.DATA_DIR / 'processed' / 'train.parquet'
@@ -121,9 +132,9 @@ class Tuner:
                  model = TransformerAgent(input_dim=feat_dim, d_model=d_model, nhead=nhead, num_layers=num_layers, dropout=dropout)
                  trainer = Trainer(model, lr=lr)
                  
-                 # Train (Short but sufficient for Pruning)
-                 # Increased to 10 epochs (Pruning will kill bad ones early)
-                 trainer.train(train_loader, val_loader, epochs=10, trial=trial)
+                 # Train (High Fidelity)
+                 # Increased to 25 epochs to see true convergence
+                 trainer.train(train_loader, val_loader, epochs=25, trial=trial)
                  
                  # Score (Validation Loss)
                  val_loss = trainer.validate(val_loader)
@@ -138,16 +149,15 @@ class Tuner:
 
     def run_optimization(self):
         # MedianPruner: Prune if intermediate result is worse than median of intermediate results of previous trials at the same step.
-        # Warmup=2 means don't prune until epoch 2.
-        study = optuna.create_study(direction="minimize", pruner=optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=2))
-        logger.info("Starting Optimization Study with PURGED CV + MedianPruning...")
+        study = optuna.create_study(direction="minimize", pruner=optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=5))
+        logger.info("Starting PRECISION Optimization Study (Zoom-In)...")
         study.optimize(self.objective, n_trials=self.n_trials)
         
         logger.info(f"Best Params: {study.best_params}")
         
         # Save Best Params
         import json
-        out_path = config.MODELS_DIR / "best_params.json"
+        out_path = config.MODELS_DIR / "best_params_precision.json"
         with open(out_path, "w") as f:
             json.dump(study.best_params, f, indent=4)
         logger.info(f"Saved best params to {out_path}")
@@ -156,6 +166,6 @@ class Tuner:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    # Increased trials because pruning makes them cheaper
-    tuner = Tuner(n_trials=50) 
+    # 30 Trials is enough for this narrow space
+    tuner = Tuner(n_trials=30) 
     tuner.run_optimization()
