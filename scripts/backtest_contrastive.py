@@ -170,39 +170,21 @@ def run_backtest():
             mkt_ret = subset['close'].pct_change().mean() * 10000 # bps
             
             # 2. Strategy Performance (Hypothetical)
-            # Buy if score > 0.85
-            sigs = subset['pred_score'] > 0.85
+            # Buy if score > THRESHOLD
+            sigs = subset['pred_score'] > 0.99
             if sigs.sum() > 0:
-                # Simple Next-Bar Return approximation
-                # We need real future return. 
-                # Let's use the 'target' column as proxy for direction correctness?
-                # Target is 1 if Price Up, 0 if Price Down in next horizon.
-                # Win = (Pred > 0.85) AND (Target == 1)
-                
-                wins = ((subset['pred_score'] > 0.85) & (subset['target'] > 0.5)).sum()
+                wins = ((subset['pred_score'] > 0.99) & (subset['target'] > 0.5)).sum()
                 trades = sigs.sum()
                 wr = (wins / trades) * 100
-                
-                # Approx PnL: Sum of (Next Ret) where Trade=1
-                # We don't have explicit 'next_ret' col easily without strict shift.
-                # VectorBT calculates it exactly later. 
-                # For now, Win Rate is the best proxy.
-                strat_pnl = "N/A"
             else:
                 wr = 0.0
                 trades = 0
-                strat_pnl = "0"
             
             print(f"{r:<8} | {mask.sum():<6} | {mkt_ret:<10.2f} | {wr:<10.1f}% | {trades} trades")
             
         print("="*50 + "\n")
         
-        # FILTER STRATEGY
-        # Based on previous analysis:
-        # Regime 0: "Saturation" (Always Buy, High Volatility Risk)
-        # Regime 1: "Fear" (Never Buy)
-        # Regime 2: "Goldilocks" (Selective, 67% Win Rate)
-        
+        # FILTER STRATEGY: Regime 2 Only + High Threshold
         logger.info("Applying Filter: KEEP ONLY REGIME 2 ")
         regime_condition = (valid_df['regime'] == 2)
         
@@ -211,7 +193,7 @@ def run_backtest():
         regime_condition = True
 
     # Signal Logic
-    THRESHOLD = 0.85
+    THRESHOLD = 0.99
     buy_signal = (valid_df['pred_score'] > THRESHOLD) & regime_condition
     
     # Sell Logic:
