@@ -146,10 +146,14 @@ def run_backtest():
     
     # Alignment
     valid_df = df_val.iloc[seq_len:].copy()
-    valid_df['pred_score'] = all_probs
+    
+    # SMOOTIIING: Fix Signal Flicker
+    # Raw scores oscillate +/- 1 too fast. We Smooth it to capture the Trend.
+    valid_df['pred_score_raw'] = all_probs
+    valid_df['pred_score'] = pd.Series(all_probs).ewm(span=5).mean().values
     
     # DEBUG: Prediction Stats
-    logger.info(f"Prediction Stats: Min={all_probs.min():.4f}, Max={all_probs.max():.4f}, Mean={all_probs.mean():.4f}, Std={all_probs.std():.4f}")
+    logger.info(f"Prediction Stats (Smoothed): Min={valid_df['pred_score'].min():.4f}, Max={valid_df['pred_score'].max():.4f}, Mean={valid_df['pred_score'].mean():.4f}, Std={valid_df['pred_score'].std():.4f}")
     
     # Assign HMM States
     if hmm_states is not None:
