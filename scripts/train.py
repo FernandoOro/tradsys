@@ -394,12 +394,12 @@ if __name__ == "__main__":
     parser.add_argument("--pretrain", action="store_true", help="Deep Pre-Training")
     parser.add_argument("--no-adv-val", action="store_true", help="Skip Adversarial Validation (Debug)")
     
-    # Hyperparameters
-    parser.add_argument("--lr", type=float, default=4.6e-5, help="Learning Rate")
-    parser.add_argument("--d_model", type=int, default=64, help="Model Dimension")
-    parser.add_argument("--nhead", type=int, default=8, help="Attention Heads")
-    parser.add_argument("--layers", type=int, default=3, help="Transformer Layers")
-    parser.add_argument("--dropout", type=float, default=0.23, help="Dropout")
+    # Hyperparameters (Optimized 2025-12-12)
+    parser.add_argument("--lr", type=float, default=3.79e-4, help="Learning Rate")
+    parser.add_argument("--d_model", type=int, default=128, help="Model Dimension")
+    parser.add_argument("--nhead", type=int, default=4, help="Attention Heads")
+    parser.add_argument("--layers", type=int, default=2, help="Transformer Layers")
+    parser.add_argument("--dropout", type=float, default=0.12, help="Dropout")
     
     args = parser.parse_args()
     
