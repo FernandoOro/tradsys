@@ -110,7 +110,9 @@ def run_backtest():
     predictor = ContrastivePredictor(model_path, input_dim=feat_dim)
     
     # Contrastive HMM Logic
-    hmm_path = config.MODELS_DIR / "hmm_contrastive.pkl"
+    # DEBUG: Disabling HMM to verify baseline (92 trades vs 8715)
+    # Restore true path later
+    hmm_path = config.MODELS_DIR / "hmm_contrastive_DISABLED.pkl" 
     pca_path = config.MODELS_DIR / "pca_contrastive.pkl"
     
     if hmm_path.exists() and pca_path.exists():
