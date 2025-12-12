@@ -202,11 +202,19 @@ def run_backtest():
         valid_df['regime'] = hmm_states
         
         # --- PER REGIME STRATEGY ANALYSIS ---
-        print("\n" + "="*50)
+        print("\n" + "="*65)
         print("       HMM LATENT REGIME PERFORMANCE")
-        print("="*50)
-        print(f"{'Regime':<8} | {'Bars':<6} | {'Mkt Ret':<10} | {'Win Rate':<10} | {'Strat PnL':<10}")
-        print("-" * 50)
+        print("="*65)
+        print(f"{'Regime':<8} | {'Bars':<6} | {'Mkt Ret':<10} | {'Win Rate':<10} | {'Avg Vol%':<10} | {'Strat PnL':<10}")
+        print("-" * 65)
+        
+        # Calculate ATR globally first for analysis
+        high_low = valid_df['high'] - valid_df['low']
+        high_close = np.abs(valid_df['high'] - valid_df['close'].shift())
+        low_close = np.abs(valid_df['low'] - valid_df['close'].shift())
+        tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+        atr = tr.rolling(window=14).mean().bfill()
+        valid_df['atr_pct'] = atr / valid_df['close']
         
         for r in sorted(valid_df['regime'].unique()):
             mask = valid_df['regime'] == r
@@ -214,6 +222,7 @@ def run_backtest():
             
             # 1. Market Context
             mkt_ret = subset['close'].pct_change().mean() * 10000 # bps
+            avg_vol = subset['atr_pct'].mean() * 100
             
             # 2. Strategy Performance (Hypothetical)
             # Buy if score > THRESHOLD
@@ -226,15 +235,15 @@ def run_backtest():
                 wr = 0.0
                 trades = 0
             
-            print(f"{r:<8} | {mask.sum():<6} | {mkt_ret:<10.2f} | {wr:<10.1f}% | {trades} trades")
+            print(f"{r:<8} | {mask.sum():<6} | {mkt_ret:<10.2f} | {wr:<10.1f}% | {avg_vol:<10.4f}% | {trades} trades")
             
-        print("="*50 + "\n")
+        print("="*65 + "\n")
         
-        
-        # FILTER STRATEGY: Regime 0 (High Confidence)
-        # Regime 0 showed 90% accuracy in direction.
-        # Regime 2 dropped to 53% with high threshold.
-        logger.info("Applying Filter: KEEP ONLY REGIME 0 (High Accuracy)")
+        # FILTER STRATEGY: 
+        # We need High Accuracy AND High Volatility (>0.2%)
+        # Let's verify which regime meets this.
+        # For now, default to Regime 0 but user will see the table.
+        logger.info("Applying Filter: KEEP ONLY REGIME 0")
         regime_condition = (valid_df['regime'] == 0)
         
     else:
