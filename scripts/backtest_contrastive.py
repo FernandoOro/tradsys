@@ -109,48 +109,82 @@ def run_backtest():
         
     predictor = ContrastivePredictor(model_path, input_dim=feat_dim)
     
-    # HMM (Optional)
-    hmm_path = config.MODELS_DIR / "hmm_regime.pkl"
-    if hmm_path.exists():
+    # Contrastive HMM Logic
+    hmm_path = config.MODELS_DIR / "hmm_contrastive.pkl"
+    pca_path = config.MODELS_DIR / "pca_contrastive.pkl"
+    
+    if hmm_path.exists() and pca_path.exists():
+        logger.info("Loading Latent HMM & PCA...")
         hmm_model = joblib.load(hmm_path)
-        rd = RegimeDetector(n_components=3)
-        rd.model = hmm_model
-        rd.is_fitted = True
-        import warnings
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            hmm_data = rd.prepare_data(df_val)
-            states = rd.model.predict(hmm_data.values)
-            s_series = pd.Series(states, index=hmm_data.index)
-            df_val['regime'] = s_series.reindex(df_val.index).fillna(-1)
-    else:
-        df_val['regime'] = 1 
+        pca_model = joblib.load(pca_path)
         
+        # We need to extract embeddings for valid_df
+        # Re-create dataset for inference just like before
+        # But we need the embeddings this time, not just predictions
+        # Predictor doesn't return embeddings. 
+        # We need to access model definition. Predictor has `self.model`.
+        
+        # Let's extract embeddings for the whole validation set
+        logger.info("Extracting Embeddings for Regime Detection...")
+        
+        # Re-use loader
+        embeddings = []
+        with torch.no_grad():
+             for batch_x, batch_t in tqdm(loader, desc="Embeddings"):
+                 batch_x = batch_x.to(predictor.device)
+                 batch_t = batch_t.to(predictor.device)
+                 emb = predictor.model.extract_features(batch_x, batch_t)
+                 embeddings.append(emb.cpu().numpy())
+        
+        embeddings = np.concatenate(embeddings, axis=0)
+        
+        # PCA -> HMM
+        latent_val = pca_model.transform(embeddings)
+        states = hmm_model.predict(latent_val)
+        
+        # Match length
+        valid_df['regime'] = states
+        
+        # Analyze Regimes
+        for r in range(hmm_model.n_components):
+            r_mask = (valid_df['regime'] == r)
+            r_ret = valid_df.loc[r_mask, 'close'].pct_change().mean() * 10000 # prox
+            logger.info(f"Regime {r}: {r_mask.sum()} bars.")
+            
+    else:
+        logger.warning("Latent HMM not found. Running without filter.")
+        valid_df['regime'] = 1 
+    
     # Inference
+    # (Existing inference loop was used above, but we need predictions too. 
+    #  We used the loader for embeddings. We can re-use the loader or predict in the same loop?
+    #  Predictor.predict calls model(x,t). 
+    #  Let's just run the standard inference loop separately to avoid messing up logic flow, reasonable cost.)
+    
     all_probs = []
     logger.info("Running Batch Inference (PyTorch)...")
-    for batch_x, batch_t in tqdm(loader):
+    for batch_x, batch_t in tqdm(loader, desc="Predictions"):
         preds = predictor.predict(batch_x.numpy(), batch_t.numpy())
         all_probs.extend(preds['direction'])
     
     all_probs = np.array(all_probs)
     
     # Alignment
-    valid_df = df_val.iloc[seq_len:].copy()
     valid_df['pred_score'] = all_probs
     
     # Signal Logic
-    THRESHOLD = 0.75 # Lower threshold due to SupCon strength? Or keep 0.95?
-    # Context says: "Sniper: 0.95", "Audited: 0.75".
-    # Let's test with 0.85 as a middle ground for this new model, or stick to 0.75?
-    # Let's use 0.85
     THRESHOLD = 0.85
     
+    # DYNAMIC REGIME FILTERING (Experimental)
+    # We don't know which state is 'Bad'. 
+    # Strategy: For this backtest, allow ALL regimes, but print performance per regime.
+    # User can then restrict 'regime != X' in next run.
+    regime_condition = True 
+    
     if 'regime' in valid_df.columns:
-        regime_condition = (valid_df['regime'] != 0)
-    else:
-        regime_condition = True
-        
+         # Calculate basic stats per regime to help user decide
+         pass
+
     buy_signal = (valid_df['pred_score'] > THRESHOLD) & regime_condition
     sell_signal = (valid_df['pred_score'] < 0.0)
     

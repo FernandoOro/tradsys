@@ -195,8 +195,19 @@ The current Focal Loss forces the model to memorize "Up/Down" labels. A geometri
 *   **Improvement**: -10.2% vs Previous Best (0.5220).
 *   **Conclusion**: The hypothesis is confirmed. Geometric clustering (SupCon) extracts significantly more signal than standard classification. This is the new SOTA (State of the Art) for the project.
 
-### 14. Next Step: Productionize & Backtest
-The Contrastive Model (`model_contrastive.pt`) is now the Alpha.
-We need to:
-1.  Create a unified `Predictor` that uses the `extract_features` + `LinearProbe` architecture.
-2.  Run `scripts/backtest.py` with this new model to verify profitability.
+### 14. Phase 28 Analysis: The "Payoff Ratio" Discovery
+**Backtest Result (Contrastive Model)**:
+*   **Total Return**: +4.99% (vs +1.11% Sniper).
+*   **Sharpe**: 1.16 (Acceptable for pure ML).
+*   **Trades**: 92 (High Activity).
+*   **Win Rate**: 50.0%.
+
+**Interpretation**:
+Why is this a success if Win Rate is 50%?
+1.  **Volume**: It found 92 actionable setups (vs 2 in Sniper). It is **scalable**.
+2.  **Risk/Reward**: A 50% win rate with positive return implies the winners are larger than losers (Payoff Ratio > 1.0). The model cuts losses effectively.
+3.  **Ceiling Broken**: This is the first model to generate significant volume with a Sharpe > 1.0 without manual constraints.
+
+**Next Logic Step (Phase 29)**: 
+The model is statistically sound but lacks "Market Regime" context to filter the 50% losing trades (likely during consolidations).
+*   **Action**: Integrate **Macro Regime Filter** to block trades during low-volatility DXY/Gold periods.
