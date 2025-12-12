@@ -199,24 +199,34 @@ def run_backtest():
     atr = tr.rolling(window=14).mean().bfill()
     valid_df['atr_pct'] = atr / valid_df['close']
     
+    best_regime = 0
+    best_wr = -1.0
+    
     for r in sorted(valid_df['regime'].unique()):
         mask = valid_df['regime'] == r
         subset = valid_df[mask].copy()
         mkt_ret = subset['close'].pct_change().mean() * 10000 
         avg_vol = subset['atr_pct'].mean() * 100
         sigs = subset['pred_score'] > 0.99
-        if sigs.sum() > 0:
+        
+        trade_count = sigs.sum()
+        if trade_count > 0:
             wins = ((subset['pred_score'] > 0.99) & (subset['target'] > 0.5)).sum()
-            trades = sigs.sum()
-            wr = (wins / trades) * 100
+            wr = (wins / trade_count) * 100
         else:
             wr = 0.0
-        print(f"{r:<8} | {mask.sum():<6} | {mkt_ret:<10.2f} | {wr:<10.1f}% | {avg_vol:<10.4f}%")
+            
+        print(f"{r:<8} | {mask.sum():<6} | {mkt_ret:<10.2f} | {wr:<10.1f}% | {avg_vol:<10.4f}% | {trade_count} trades")
         
-    logger.info("Applying Filter: KEEP ONLY REGIME 0")
-    # Logic: 
-    buy_signal = (valid_df['pred_score'] > 0.99) & (valid_df['regime'] == 0)
-    sell_signal = (valid_df['regime'] != 0)
+        # Selection Logic: Valid trade count and highest WR
+        if trade_count > 10 and wr > best_wr:
+            best_wr = wr
+            best_regime = r
+        
+    logger.info(f"Applying Filter: KEEP ONLY REGIME {best_regime} (Best WR: {best_wr:.1f}%)")
+    
+    buy_signal = (valid_df['pred_score'] > 0.99) & (valid_df['regime'] == best_regime)
+    sell_signal = (valid_df['regime'] != best_regime)
     
     conditions = [buy_signal, sell_signal]
     choices = [1, -1]
