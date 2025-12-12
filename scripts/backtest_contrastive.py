@@ -200,9 +200,10 @@ def run_backtest():
     buy_signal = (valid_df['pred_score'] > THRESHOLD) & regime_condition
     
     # Sell Logic:
-    # 1. Bearish Prediction (< 0.0)
+    # 1. Strong Bearish Prediction (< -0.8) -> Trend Reversal
     # 2. Leaving the Regime (Safety Exit)
-    sell_signal = (valid_df['pred_score'] < 0.0) | (valid_df['regime'] != 0)
+    # This prevents "Scalping" on noise (0.0 crossings) and allows holding the trend (TBM behavior)
+    sell_signal = (valid_df['pred_score'] < -0.8) | (valid_df['regime'] != 0)
     
     conditions = [buy_signal, sell_signal]
     choices = [1, -1]
