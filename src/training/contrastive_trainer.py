@@ -121,8 +121,12 @@ class ContrastiveTrainer:
             param.requires_grad = False
             
         # Re-enable Classifier Head Gradients
-        # This assumes the model has a 'head' or 'fc' layer that is the classifier
-        if hasattr(self.model, 'decoder'):
+        if hasattr(self.model, 'head_direction'):
+             for param in self.model.head_direction.parameters():
+                 param.requires_grad = True
+             for param in self.model.head_confidence.parameters():
+                 param.requires_grad = True
+        elif hasattr(self.model, 'decoder'):
              for param in self.model.decoder.parameters():
                  param.requires_grad = True
         else:
