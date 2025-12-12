@@ -4,6 +4,11 @@ import torch
 import numpy as np
 import pandas as pd
 from torch.utils.data import DataLoader, TensorDataset
+import sys
+import os
+
+# Fix PYTHONPATH
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
 from src.models.agents.transformer import TransformerAgent
 from src.training.trainer import Trainer
