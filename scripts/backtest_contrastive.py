@@ -69,6 +69,44 @@ class LazySequenceDataset(Dataset):
         # We don't need y for inference
         return x, t
 
+# === SIMULATOR (Local override for Contrastive SL/TP) ===
+import vectorbt as vbt
+class ContrastiveSimulator:
+    """
+    Isolated Simulator for Contrastive Strategy.
+    Supports SL/TP execution explicitly.
+    """
+    def __init__(self, fees: float = 0.001, slippage: float = 0.0005):
+        self.fees = fees
+        self.slippage = slippage
+        
+    def run_backtest(self, close_price: pd.Series, signals: pd.Series, sl_stop=None, tp_stop=None):
+        entries = signals == 1
+        # If SL/TP is used, we disable 'exits' based on signal, 
+        # unless signal is explicitly -1 (which we might keep for Safety Exit)
+        exits = signals == -1 
+        
+        logger.info(f"Running Contrastive Simulation (SL={sl_stop}, TP={tp_stop})...")
+        
+        portfolio = vbt.Portfolio.from_signals(
+            close_price,
+            entries,
+            exits,
+            fees=self.fees,
+            slippage=self.slippage,
+            init_cash=10000,
+            freq='1h',
+            sl_stop=sl_stop,
+            tp_stop=tp_stop
+        )
+        
+        stats = portfolio.stats()
+        logger.info("Backtest Results:")
+        logger.info(f"Total Return: {stats['Total Return [%]']:.2f}%")
+        logger.info(f"Sharpe Ratio: {stats['Sharpe Ratio']:.2f}")
+        
+        return portfolio, stats
+
 def run_backtest():
     val_path = config.PROCESSED_DATA_DIR / "val.parquet"
     if not val_path.exists():
@@ -204,20 +242,28 @@ def run_backtest():
     buy_signal = (valid_df['pred_score'] > THRESHOLD) & regime_condition
     
     # Sell Logic:
-    # 1. Strong Bearish Prediction (< -0.8) -> Trend Reversal
-    # 2. Leaving the Regime (Safety Exit)
-    # This prevents "Scalping" on noise (0.0 crossings) and allows holding the trend (TBM behavior)
-    sell_signal = (valid_df['pred_score'] < -0.8) | (valid_df['regime'] != 0)
+    # DISABLE Score-based exit to prevent "flicker churn".
+    # Only exit if we leave the Safe Regime (Safety Net).
+    # Actual trade management is handled by SL/TP params in Simulator.
+    sell_signal = (valid_df['regime'] != 0) 
     
     conditions = [buy_signal, sell_signal]
     choices = [1, -1]
     valid_df['signal_trade'] = np.select(conditions, choices, default=0)
     
-    logger.info(f"Trades Generated: {np.sum(valid_df['signal_trade'] == 1)}")
+    logger.info(f"Trades Generated (Entry Signals): {np.sum(valid_df['signal_trade'] == 1)}")
     
     # Sim
-    sim = Simulator(fees=0.001, slippage=0.0005)
-    portfolio, stats = sim.run_backtest(valid_df['close'], valid_df['signal_trade'])
+    # Using SL=1% and TP=2% (Risk Ratio 1:2)
+    # TBM training used 1.5 ATR, which is rarely hit in 1 bar.
+    # We hold until hit.
+    sim = ContrastiveSimulator(fees=0.001, slippage=0.0005)
+    portfolio, stats = sim.run_backtest(
+        valid_df['close'], 
+        valid_df['signal_trade'],
+        sl_stop=0.01,
+        tp_stop=0.02
+    )
     
     print("\n" + "="*40)
     print("   CONTRASTIVE STRATEGY REPORT   ")
