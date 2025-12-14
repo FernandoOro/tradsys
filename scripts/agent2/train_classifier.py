@@ -47,10 +47,19 @@ def load_data_labeled(path):
 
 def objective(trial):
     # 1. Hyperparameters to Tune
-    lr = trial.suggest_loguniform('lr', 1e-5, 1e-3)
+    lr = trial.suggest_float('lr', 1e-5, 1e-3, log=True)
     batch_size = trial.suggest_categorical('batch_size', [64, 128, 256])
-    dropout = trial.suggest_uniform('dropout', 0.1, 0.5)
-    gamma = trial.suggest_uniform('focal_gamma', 1.0, 3.0) # For Focal Loss
+    dropout = trial.suggest_float('dropout', 0.1, 0.5)
+    gamma = trial.suggest_float('focal_gamma', 1.0, 3.0) # For Focal Loss
+    
+    # Init WandB for this trial
+    if USE_WANDB:
+        wandb.init(
+            project="agent2_reversion",
+            config=trial.params,
+            reinit=True,
+            group="optuna_tuning"
+        )
     
     # 2. Setup Data
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -101,9 +110,6 @@ def objective(trial):
     # 4. Loss & Optimizer
     # 3 Classes: 0 (Neutral), 1 (Buy), 2 (Sell)
     # Use Focal Loss to handle imbalance (Neutral is dominant)
-    criterion = FocalLoss(gamma=gamma, reduction='mean').to(device)
-    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
-    
     criterion = FocalLoss(gamma=gamma, reduction='mean').to(device)
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
     
