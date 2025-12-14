@@ -1,23 +1,60 @@
-root@47c9e54115f3:/workspace/tradsys# python scripts/backtest_contrastive.py
-INFO:Backtester-Contrastive:Loading Validation Data: /workspace/tradsys/data/processed/val.parquet
-INFO:Backtester-Contrastive:Loading PyTorch Model from /workspace/tradsys/models/model_contrastive.pt...
-INFO:Backtester-Contrastive:Running Batch Inference (PyTorch)...
-100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 5/5 [00:00<00:00, 10.79it/s]
-INFO:Backtester-Contrastive:Trades Generated: 92
-INFO:src.backtesting.simulator:Running VectorBT Backtest...
-INFO:src.backtesting.simulator:Backtest Results:
-INFO:src.backtesting.simulator:Total Return: 4.99%
-INFO:src.backtesting.simulator:Sharpe Ratio: 1.16
-INFO:src.backtesting.simulator:Max Drawdown: 2.21%
+  File "/app/scripts/run_paper_1h.py", line 237, in <module>
 
-========================================
-   CONTRASTIVE STRATEGY REPORT   
-========================================
-Total Return [%]    4.992115
-Sharpe Ratio        1.155837
-Max Drawdown [%]    2.209061
-Win Rate [%]            50.0
-dtype: object
-========================================
+    bot.start()
 
-root@47c9e54115f3:/workspace/tradsys# 
+  File "/app/scripts/run_paper_1h.py", line 229, in start
+
+    self.run_cycle()
+
+  File "/app/scripts/run_paper_1h.py", line 165, in run_cycle
+
+    X_pca = self.brain.pca_data.transform(df_feats)
+
+  File "/app/src/data/reduction.py", line 29, in transform
+
+    data_pca = self.pca.transform(df)
+
+  File "/usr/local/lib/python3.10/site-packages/sklearn/utils/_set_output.py", line 316, in wrapped
+
+    data_to_wrap = f(self, X, *args, **kwargs)
+
+  File "/usr/local/lib/python3.10/site-packages/sklearn/decomposition/_base.py", line 138, in transform
+
+    X = validate_data(
+
+  File "/usr/local/lib/python3.10/site-packages/sklearn/utils/validation.py", line 2929, in validate_data
+
+    _check_feature_names(_estimator, X, reset=reset)
+
+  File "/usr/local/lib/python3.10/site-packages/sklearn/utils/validation.py", line 2787, in _check_feature_names
+
+    raise ValueError(message)
+
+ValueError: The feature names should match those that were passed during fit.
+
+Feature names seen at fit time, yet now missing:
+
+- close_ETH
+
+- corr_ETH
+
+- rel_str_ETH
+
+- sample_weight
+
+- target_class
+
+- ...
+
+
+2025-12-12 13:03:04,316 - PaperTrader-1H - INFO - Loading Models from /app/models/contrastive_1h...
+
+/usr/local/lib/python3.10/site-packages/sklearn/base.py:442: InconsistentVersionWarning: Trying to unpickle estimator PCA from version 1.8.0 when using version 1.7.2. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations⁠
+
+  warnings.warn(
+
+2025-12-12 13:03:04,799 - PaperTrader-1H - INFO - ✅ All Models Loaded Successfully.
+
+2025-12-12 13:03:04,800 - PaperTrader-1H - INFO - 🤖 Paper Trader 1H initialized. Waiting for :02 minute...

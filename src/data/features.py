@@ -41,6 +41,13 @@ class FeatureEngineer:
         # 5. Volatility
         df['volatility_24h'] = df['log_ret'].rolling(window=24).std()
         
+        # 6. Bollinger Bands & Distances (Agent 2 Essentials)
+        bb_indicator = ta.volatility.BollingerBands(close=df["close"], window=20, window_dev=2)
+        df['bb_high'] = bb_indicator.bollinger_hband()
+        df['bb_low'] = bb_indicator.bollinger_lband()
+        df['bb_width'] = (df['bb_high'] - df['bb_low']) / df['close'] # Relative Width
+        df['dist_to_ma'] = (df['close'] - bb_indicator.bollinger_mavg()) / df['close'] # Normalized Dist
+        
         return df
 
     def add_context_features(self, df: pd.DataFrame) -> pd.DataFrame:

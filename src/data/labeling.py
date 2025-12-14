@@ -171,3 +171,82 @@ class Labeler:
         # Align
         df_labeled = df.join(labels_df[['target_class', 'target_ret', 'sample_weight']], how='inner')
         return df_labeled
+
+    def add_reversion_targets(self, df: pd.DataFrame, horizon: int = 24) -> pd.DataFrame:
+        """
+        Creates labels for Mean Reversion (Agent 2).
+        STRICT LOGIC:
+        1. Buy Signal (1): Price < BB_Lower AND Hits Take Profit (+1%) BEFORE Stop Loss (-0.5%).
+        2. Sell Signal (2): Price > BB_Upper AND Hits Take Profit (-1%) BEFORE Stop Loss (+0.5%).
+        3. Neutral (0): Else
+        """
+        if 'bb_low' not in df.columns:
+            logger.warning("Bollinger Bands not found. Please run feature engineering first.")
+            return df
+            
+        n = len(df)
+        labels = np.zeros(n)
+        
+        # Parameters
+        TP_PCT = 0.010  # Reduced to 1.0% (Reversion is quick)
+        SL_PCT = 0.005  # Tight Stop (0.5%) - Risk/Reward 2:1
+        
+        close = df['close'].values
+        low = df['low'].values
+        high = df['high'].values
+        
+        # 1. Identify Potential Zones (Triggers)
+        # Using .values for speed
+        bb_low = df['bb_low'].values
+        bb_high = df['bb_high'].values
+        
+        potential_buy = close < bb_low
+        potential_sell = close > bb_high
+        
+        # 2. Vectorized Barrier Check
+        # We need to loop or use advanced numpy to check "First Hit".
+        # For simplicity and clarity in python, a numba-like loop is best, 
+        # but here we use a simple window loop which is fast enough for 100k rows.
+        
+        for i in range(n - horizon):
+            # BUY LOGIC
+            if potential_buy[i]:
+                entry = close[i]
+                tp_price = entry * (1 + TP_PCT)
+                sl_price = entry * (1 - SL_PCT)
+                
+                # Look ahead
+                window_high = high[i+1 : i+1+horizon]
+                window_low = low[i+1 : i+1+horizon]
+                
+                # Did we hit TP?
+                tp_hits = np.where(window_high >= tp_price)[0]
+                # Did we hit SL?
+                sl_hits = np.where(window_low <= sl_price)[0]
+                
+                first_tp = tp_hits[0] if len(tp_hits) > 0 else horizon + 1
+                first_sl = sl_hits[0] if len(sl_hits) > 0 else horizon + 1
+                
+                if first_tp < first_sl:
+                    labels[i] = 1 # Valid Buy
+                    
+            # SELL LOGIC
+            elif potential_sell[i]:
+                entry = close[i]
+                tp_price = entry * (1 - TP_PCT)
+                sl_price = entry * (1 + SL_PCT)
+                
+                window_high = high[i+1 : i+1+horizon]
+                window_low = low[i+1 : i+1+horizon]
+                
+                tp_hits = np.where(window_low <= tp_price)[0]
+                sl_hits = np.where(window_high >= sl_price)[0]
+                
+                first_tp = tp_hits[0] if len(tp_hits) > 0 else horizon + 1
+                first_sl = sl_hits[0] if len(sl_hits) > 0 else horizon + 1
+                
+                if first_tp < first_sl:
+                    labels[i] = 2 # Valid Sell
+
+        df['target_reversion'] = labels
+        return df

@@ -57,25 +57,105 @@ def load_signals():
         return pd.DataFrame()
 
 # --- Main Layout ---
-col1, col2, col3 = st.columns(3)
+# --- Classification Logic ---
+def classify_bot(status):
+    status = str(status).upper()
+    # Hybrid Architecture Map
+    if '1H' in status and ('SHORT' in status or 'FUT' in status or 'OPEN_1H_SHORT' in status): return 'Agent 1H (Futures)'
+    if '1H' in status: return 'Agent 1H (Spot)'
+    
+    if 'AUDITED' in status and 'FUT' in status: return 'Agent 1 (Audited) [FUTURES]'
+    if 'AUDITED' in status: return 'Agent 1 (Audited)'
+    
+    if 'SNIPER' in status and 'FUT' in status: return 'Agent 1 (Sniper) [FUTURES]'
+    if 'SNIPER' in status: return 'Agent 1 (Sniper)'
+    
+    if 'RECKLESS' in status and 'FUT' in status: return 'Agent 1 (Reckless) [FUTURES]'
+    if 'RECKLESS' in status: return 'Agent 1 (Reckless)'
+    
+    if 'TESTNET' in status or '1M' in status: return 'Agent 1 (Legacy)'
+    return 'Unknown'
+
+col1, col2 = st.columns([1, 2])
 
 # Load Data
 df_trades = load_trades()
 df_signals = load_signals()
 
-# Metrics
+# Global Metrics
 total_trades = len(df_trades)
 if not df_trades.empty:
-    win_rate = len(df_trades[df_trades['pnl'] > 0]) / total_trades * 100 if 'pnl' in df_trades.columns else 0
-    # Approx PnL if not populated yet
-    pnl_sum = df_trades['pnl'].sum() if 'pnl' in df_trades.columns else 0.0
+    # Ensure PnL exists
+    if 'pnl' not in df_trades.columns: df_trades['pnl'] = 0.0
+    
+    win_rate = len(df_trades[df_trades['pnl'] > 0]) / total_trades * 100
+    pnl_sum = df_trades['pnl'].sum()
+    
+    # --- BOT COMPARISON ---
+    df_trades['Bot'] = df_trades['status'].apply(classify_bot)
+    
+    summary = df_trades.groupby('Bot').agg(
+        Trades=('id', 'count'),
+        Win_Rate=('pnl', lambda x: (x > 0).mean() * 100),
+        Total_PnL=('pnl', 'sum'),
+        Avg_PnL=('pnl', 'mean')
+    ).reset_index()
+    
+    # Ensure expected bots exist
+    # Ensure expected bots exist (Hybrid Fleet)
+    expected_bots = [
+        'Agent 1H (Spot)', 'Agent 1H (Futures)',
+        'Agent 1 (Audited)', 'Agent 1 (Audited) [FUTURES]',
+        'Agent 1 (Sniper)', 'Agent 1 (Sniper) [FUTURES]',
+        'Agent 1 (Reckless)', 'Agent 1 (Reckless) [FUTURES]'
+    ]
+    for bot in expected_bots:
+        if bot not in summary['Bot'].values:
+            new_row = {'Bot': bot, 'Trades': 0, 'Win_Rate': 0.0, 'Total_PnL': 0.0, 'Avg_PnL': 0.0}
+            summary = pd.concat([summary, pd.DataFrame([new_row])], ignore_index=True)
+
+    # Format for display
+    summary['Win_Rate'] = summary['Win_Rate'].map('{:.1f}%'.format)
+    summary['Total_PnL'] = summary['Total_PnL'].map('${:.2f}'.format)
+    summary['Avg_PnL'] = summary['Avg_PnL'].map('${:.2f}'.format)
+    
+    # Sort: 1H first, then Audited, Sniper, Reckless
+    def sort_bots(name):
+        if '1H' in name and 'Futures' in name: return 1
+        if '1H' in name: return 0
+        
+        if 'Audited' in name and 'FUTURES' in name: return 3
+        if 'Audited' in name: return 2
+        
+        if 'Sniper' in name and 'FUTURES' in name: return 5
+        if 'Sniper' in name: return 4
+        
+        if 'Reckless' in name and 'FUTURES' in name: return 7
+        if 'Reckless' in name: return 6
+        return 99
+        return 99
+        
+    summary['sort_key'] = summary['Bot'].apply(sort_bots)
+    summary = summary.sort_values('sort_key').drop(columns='sort_key')
+
 else:
     win_rate = 0
     pnl_sum = 0.0
+    summary = pd.DataFrame()
 
-col1.metric("Total Trades", total_trades)
-col2.metric("Win Rate", f"{win_rate:.1f}%")
-col3.metric("Total PnL (Est)", f"${pnl_sum:.2f}")
+with col1:
+    st.metric("Total Trades", total_trades)
+    st.metric("Global Win Rate", f"{win_rate:.1f}%")
+    st.metric("Global PnL (Est)", f"${pnl_sum:.2f}")
+
+with col2:
+    st.subheader("🤖 Bot Performance Comparison")
+    if not summary.empty:
+        st.dataframe(summary, width="stretch", hide_index=True)
+    else:
+        st.info("Waiting for trade data...")
+
+
 
 # --- Tabs ---
 tab1, tab2, tab3 = st.tabs(["🚀 Execution", "🧠 Signals (Brain)", "📉 Performance"])
@@ -83,7 +163,7 @@ tab1, tab2, tab3 = st.tabs(["🚀 Execution", "🧠 Signals (Brain)", "📉 Perf
 with tab1:
     st.subheader("Recent Executions")
     if not df_trades.empty:
-        st.dataframe(df_trades.head(20), use_container_width=True)
+        st.dataframe(df_trades.head(20), width="stretch")
     else:
         st.info("No trades recorded yet.")
 
@@ -92,9 +172,9 @@ with tab2:
     if not df_signals.empty:
         # Charts for Confidence
         fig_conf = px.line(df_signals, x='timestamp', y='confidence', title="Model Confidence over Time")
-        st.plotly_chart(fig_conf, use_container_width=True)
+        st.plotly_chart(fig_conf)
         
-        st.dataframe(df_signals, use_container_width=True)
+        st.dataframe(df_signals, width="stretch")
     else:
         st.info("No signals recorded yet.")
 
@@ -106,7 +186,7 @@ with tab3:
         df_trades['equity'] = df_trades['pnl'].fillna(0).cumsum()
         
         fig = px.line(df_trades, x='timestamp', y='equity', title="Cumulative PnL")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig)
     else:
         st.warning("Not enough PnL data to plot curve.")
 

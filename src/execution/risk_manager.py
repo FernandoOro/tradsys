@@ -63,8 +63,50 @@ class RiskManager:
         if final_position_value_usd > max_position_value_usd:
             logger.warning(f"Risk Manager: Cap at Max Leverage. Req: {final_position_value_usd:.2f}, Limit: {max_position_value_usd:.2f}")
             final_size_asset = max_position_value_usd / current_price
+
+        # FUTURES SAFEGUARD: Liquidation Check
+        if self.is_futures and final_size_asset > 0:
+            safe_size = self._check_liquidation_safety(equity, final_size_asset, current_price, stop_distance)
+            if safe_size < final_size_asset:
+                logger.warning(f"Risk Manager: Reduced size from {final_size_asset:.4f} to {safe_size:.4f} to avoid Liquidation Risk.")
+                final_size_asset = safe_size
             
         return final_size_asset
+
+    @property
+    def is_futures(self):
+        return config.EXCHANGE_ID in ['binanceusdm', 'binance_futures']
+
+    def _check_liquidation_safety(self, equity: float, size: float, price: float, stop_distance: float) -> float:
+        """
+        Ensures SL is hit BEFORE Liquidation Price.
+        Approx Liquidation (Isolated) ~= Entry - (Equity / Size)
+        We want: |Entry - SL| < |Entry - Liq| * 0.8 (20% Safety Buffer)
+        """
+        # 1. Calc implied leverage
+        notional_value = size * price
+        if equity <= 0: return 0.0
+        leverage = notional_value / equity
+        
+        # 2. Estimate Liq Distance (Simple Model: 1/Leverage)
+        # e.g. 10x leverage -> 10% move liquidates.
+        if leverage <= 0: return size
+        
+        liq_distance_pct = 1.0 / leverage
+        # Reduce mainly by Maintenance Margin (usually 0.5% for BTC) -> roughly 1/Lev is safe approx for check.
+        
+        stop_distance_pct = stop_distance / price
+        
+        # 3. Rule: Stop Distance must be < 80% of Liq Distance
+        # stop_pct < (1/lev) * 0.8
+        # stop_pct < 0.8 * (equity / (size * price))
+        # size * price * stop_pct < 0.8 * equity
+        # size < (0.8 * equity) / (price * stop_pct)
+        # size < (0.8 * equity) / stop_distance
+        
+        max_safe_size = (0.8 * equity) / stop_distance
+        
+        return min(size, max_safe_size)
 
     def check_circuit_breaker(self, daily_pnl_pct: float) -> bool:
         """

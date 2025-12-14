@@ -1,22 +1,179 @@
 version: '3.8'
 
 services:
-  bot:
+  bot_audited:
     build: .
-    container_name: smart_spot_bot
+    container_name: bot_1_audited
     command: python scripts/run_bot.py --mode paper
     volumes:
+      - ./src:/app/src
+      - ./scripts:/app/scripts
       - ./data:/app/data
       - ./models:/app/models
       - ./logs:/app/logs
+      - ./.env:/app/.env
     env_file:
       - .env
+    environment:
+      - STRATEGY_PROFILE=AUDITED
     restart: unless-stopped
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
-        max-file: "3"
+
+  bot_sniper:
+    build: .
+    container_name: bot_1_sniper
+    command: python scripts/run_bot.py --mode paper
+    volumes:
+      - ./src:/app/src
+      - ./scripts:/app/scripts
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./logs:/app/logs
+      - ./.env:/app/.env
+    env_file:
+      - .env
+    environment:
+      - STRATEGY_PROFILE=SNIPER
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+
+  bot_reckless:
+    build: .
+    container_name: bot_1_reckless
+    command: python scripts/run_bot.py --mode paper
+    volumes:
+      - ./src:/app/src
+      - ./scripts:/app/scripts
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./logs:/app/logs
+      - ./.env:/app/.env
+    env_file:
+      - .env
+    environment:
+      - STRATEGY_PROFILE=RECKLESS
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+
+  paper_trader:
+    build: .
+    container_name: contrastive_paper_bot
+    command: python scripts/run_paper_1h.py
+    volumes:
+      - ./src:/app/src
+      - ./scripts:/app/scripts
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./models:/app/models
+      - ./logs:/app/logs
+      - ./.env:/app/.env
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+
+  # === FUTURES LEAGUE (Hybrid Mode) ===
+  bot_audited_futures:
+    build: .
+    container_name: bot_1_audited_futures
+    command: python scripts/run_bot.py --mode paper
+    volumes:
+      - ./src:/app/src
+      - ./scripts:/app/scripts
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./logs:/app/logs
+      - ./.env:/app/.env
+    env_file:
+      - .env
+    environment:
+      - STRATEGY_PROFILE=AUDITED
+      - EXCHANGE_ID=binanceusdm
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+
+  bot_sniper_futures:
+    build: .
+    container_name: bot_1_sniper_futures
+    command: python scripts/run_bot.py --mode paper
+    volumes:
+      - ./src:/app/src
+      - ./scripts:/app/scripts
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./logs:/app/logs
+      - ./.env:/app/.env
+    env_file:
+      - .env
+    environment:
+      - STRATEGY_PROFILE=SNIPER
+      - EXCHANGE_ID=binanceusdm
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+
+  bot_reckless_futures:
+    build: .
+    container_name: bot_1_reckless_futures
+    command: python scripts/run_bot.py --mode paper
+    volumes:
+      - ./src:/app/src
+      - ./scripts:/app/scripts
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./logs:/app/logs
+      - ./.env:/app/.env
+    env_file:
+      - .env
+    environment:
+      - STRATEGY_PROFILE=RECKLESS
+      - EXCHANGE_ID=binanceusdm
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+
+  contrastive_futures:
+    build: .
+    container_name: contrastive_futures_bot
+    command: python scripts/run_paper_1h.py
+    volumes:
+      - ./src:/app/src
+      - ./scripts:/app/scripts
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./logs:/app/logs
+      - ./.env:/app/.env
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - EXCHANGE_ID=binanceusdm
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
 
   dashboard:
     build: .
@@ -25,13 +182,16 @@ services:
     ports:
       - "8501:8501"
     volumes:
+      - ./src:/app/src
+      - ./scripts:/app/scripts
       - ./data:/app/data:ro # Read-Only access to Data Dir (where DB lives)
       - ./logs:/app/logs:ro
     env_file:
       - .env
     restart: unless-stopped
     depends_on:
-      - bot
+      - bot_audited
+      - bot_audited_futures
 
 networks:
   default:

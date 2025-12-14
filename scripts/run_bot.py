@@ -7,6 +7,7 @@ import pickle
 import pandas as pd
 import numpy as np
 import ccxt
+import joblib
 from datetime import datetime, timezone
 
 # Add project root to path
@@ -57,7 +58,8 @@ class TradingBot:
         
         self.event_filter = EventFilter() 
         self.event_filter = EventFilter() 
-        self.predictor = Predictor(model_name="agent1")
+        # Fix: Point explicitly to subdirectory "models/agent1/agent1.onnx"
+        self.predictor = Predictor(model_name="agent1/agent1")
         # Load Agent 2 (Optional, handled gracefully if missing unless Ensemble requested)
         try:
             self.predictor_2 = Predictor(model_name="agent2")
@@ -69,16 +71,37 @@ class TradingBot:
         self.auditor = MetaAuditor("auditor_v1")
         # Correctly initialize and force load
         self.regime_detector = RegimeDetector(n_components=3)
-        self.regime_detector.load_model() # Loads from hmm_regime.pkl
+        
+        # Path Fix: Check models/agent1 first
+        hmm_path = config.MODELS_DIR / "agent1" / "hmm_regime.pkl"
+        if not hmm_path.exists():
+            hmm_path = config.MODELS_DIR / "hmm_regime.pkl"
+            
+        if hmm_path.exists():
+            try:
+                self.regime_detector.model = joblib.load(hmm_path)
+                self.regime_detector.is_fitted = True
+                logger.info(f"HMM model loaded from {hmm_path}.")
+            except Exception as e:
+                logger.error(f"Failed to load HMM: {e}")
+        else:
+            logger.warning(f"HMM model not found at {hmm_path}. Need to fit first.")
         
         self.risk_manager = RiskManager()
         
         exchange_class = getattr(ccxt, config.EXCHANGE_ID)
-        self.exchange = exchange_class({
+        exchange_options = {
             'apiKey': config.API_KEY,
             'secret': config.SECRET_KEY,
             'enableRateLimit': True
-        })
+        }
+        
+        # HYBRID ARCHITECTURE SWITCH
+        if config.EXCHANGE_ID in ['binanceusdm', 'binance_futures']:
+             logger.info("🚀 FUTURES MODE DETECTED. Configuring CCXT for Derivatives.")
+             exchange_options['options'] = {'defaultType': 'future'}
+             
+        self.exchange = exchange_class(exchange_options)
         self.router = SmartRouter(self.exchange)
         
         self.seq_len = 10
@@ -86,11 +109,33 @@ class TradingBot:
         
         # Load Strategy
         self.strategy = StrategyFactory.get_strategy()
-        logger.info(f"Loaded Strategy Profile: {self.strategy.name}")
+        # force 1m timeframe for Legacy Agent (Safety override)
+        config.TIMEFRAME = '1m'
+        logger.info(f"Loaded Strategy Profile: {self.strategy.name} on Timeframe: {config.TIMEFRAME}")
         
+        # Testnet Paper Trading Setup
+        self.use_testnet = False
+        if self.mode == "paper":
+            testnet_key = os.getenv("BINANCE_TESTNET_KEY")
+            testnet_secret = os.getenv("BINANCE_TESTNET_SECRET")
+            if testnet_key and testnet_secret:
+                # FIX: Futures Sandbox is deprecated/broken in CCXT. Using Internal Sim for Futures.
+                if config.EXCHANGE_ID in ['binanceusdm', 'binance_futures']:
+                     logger.warning("🟡 Futures Sandbox Not Supported. Forcing INTERNAL SIMULATION.")
+                     self.use_testnet = False
+                else:
+                     logger.info("🟢 Testnet Keys Detected. Enabling SANDBOX MODE for Paper Trading.")
+                     self.exchange.apiKey = testnet_key
+                     self.exchange.secret = testnet_secret
+                     self.exchange.set_sandbox_mode(True)
+                     self.use_testnet = True
+            else:
+                logger.warning("🟡 No Testnet Keys. Running in INTERNAL SIMULATION Mode (DB Only).")
+
     def run_cycle(self):
         symbol = config.SYMBOL
-        timeframe = config.TIMEFRAME
+        # Ensure 1m timeframe is used
+        timeframe = '1m' 
         
         logger.info("--- Starting Cycle ---")
         
@@ -145,7 +190,9 @@ class TradingBot:
              logger.error(f"HMM Failed: {e}")
              return
 
+
         # --- DYNAMIC INFERENCE ---
+        current_price = df['close'].iloc[-1]
         confidence = 0.0
         direction = 0.0
         agent2_score = 0.0
@@ -157,29 +204,9 @@ class TradingBot:
                 # Agent 2 takes Flattened Features (No Time)
                 pred2 = self.predictor_2.predict(x_val) # x_val shape (1, 10, Feat) -> Auto-flattened
                 agent2_score = float(pred2["score"][-1]) # Last step
-                # Map Score to Direction? 
-                # Agent 2 head is Linear(1). 
-                # If trained on BCEWithLogits, output is Logit. Sigmoid(out) -> Prob(Reversal).
-                # Wait, training used BCEWithLogitsLoss.
-                # So output is LOGIT.
-                # Prob = Sigmoid(logit).
-                # 1 = Reversal (Target 1), 0 = Continuation.
                 
                 reversal_prob = 1 / (1 + np.exp(-agent2_score))
                 agent2_score = reversal_prob # Normalize to 0-1
-                
-                # Direction? Agent 2 predicts "Reversal".
-                # If Price is Low (RSI < 30) -> Buy.
-                # If Price is High (RSI > 70) -> Sell.
-                # We need a heuristic for direction since Agent 2 only predicts "Probability of Reversal".
-                # Or did we train Agent 2 on Directional Target?
-                # Target in train_agent2: df['target'].
-                # Labeler (Triple Barrier) produces 1 (Up) or 0 (Down/Flat).
-                # So Agent 2 predicts Probability of UP move.
-                
-                # Correction: train_agent2 filters Regime 0. Target is Standard TBM (1=Up).
-                # So Agent 2 output IS probability of UP.
-                # Excellent. 
                 
                 direction = 1 if agent2_score > 0.5 else -1
                 confidence = abs(agent2_score - 0.5) * 2 # Map 0.5-1.0 to 0-1 confidence
@@ -203,9 +230,7 @@ class TradingBot:
                 logger.info(f"🤖 Agent 1 (Trend): Conf={confidence:.2f} | Dir={direction}")
                 
                 # Auditor Check (Only for Agent 1)
-                # ... (Auditor Logic)
                 is_vetoed = False # Default
-                # self.auditor.predict_veto(...) implementation missing in snippet context but assumed
                 
             except Exception as e:
                 logger.error(f"Agent 1 Inference Failed: {e}")
@@ -221,22 +246,82 @@ class TradingBot:
         
         if not should_execute:
             logger.info(f"🛑 Trade Rejected by {self.strategy.name} strategy.")
+            # Still log the signal as VETOED for analysis
+            self.storage.store_signal(
+                symbol=symbol,
+                direction=direction,
+                confidence=confidence,
+                features={
+                    "regime": int(regime),
+                    "price": float(current_price),
+                    "agent2_score": float(agent2_score),
+                    "strategy": self.strategy.name,
+                    "reason": "Strategy Reject"
+                },
+                vetoed=True
+            )
             return
+
+        # TELEMETRY: Trace Accepted Signal
+        self.storage.store_signal(
+            symbol=symbol,
+            direction=direction,
+            confidence=confidence,
+            features={
+                "regime": int(regime),
+                "price": float(current_price),
+                "agent2_score": float(agent2_score),
+                "strategy": self.strategy.name,
+                "reason": "Accepted"
+            },
+            vetoed=False
+        )
 
         # EXECUTION
         if self.mode == "paper":
-            equity = 10000.0
-            size = self.risk_manager.calculate_position_size(equity, current_atr, confidence, current_price)
-            if size > 0:
-                action = "BUY" if direction > 0 else "SELL"
-                logger.info(f"✅ PAPER EXECUTION: {action} {size:.4f} {symbol}")
-                self.storage.store_trade(
-                    symbol=symbol,
-                    side=action,
-                    size=size,
-                    price=current_price,
-                    status="OPEN"
-                )
+            if self.use_testnet:
+                 # TRUE PAPER TRADING (Binance Testnet)
+                 equity = self.exchange.fetch_balance()['total']['USDT']
+                 size = self.risk_manager.calculate_position_size(equity, current_atr=0.0, confidence=confidence, price=0.0)
+                 # Wait, pass equity and price? Need current price?
+                 ticker = self.exchange.fetch_ticker(symbol)
+                 current_price = ticker['last']
+                 # Recalculate size with price
+                 # ATR? We computed indicators. Let's get ATR.
+                 # df['atr'] exists from FeatureEngineer? FeatEng adds 'atr'.
+                 current_atr = df['atr'].iloc[-1]
+                 
+                 size = self.risk_manager.calculate_position_size(equity, current_atr, confidence, current_price)
+                 
+                 if size > 0:
+                     action = "buy" if direction > 0 else "sell"
+                     logger.info(f"✅ TESTNET ORDER: {action.upper()} {size} {symbol}")
+                     try:
+                         self.router.execute_order(symbol, action, size)
+                         # Tag with Strategy Name for Dashboard Segmentation
+                         status_tag = f"OPEN_{self.strategy.name}"
+                         if config.EXCHANGE_ID in ['binanceusdm', 'binance_futures']:
+                             status_tag += "_FUT"
+                             
+                         self.storage.store_trade(symbol, action.upper(), size, current_price, status_tag)
+                     except Exception as e:
+                         logger.error(f"Testnet Order Failed: {e}")
+            else:
+                # INTERNAL SIMULATION (Fake Money)
+                equity = 10000.0
+                current_price = df['close'].iloc[-1]
+                current_atr = df['atr'].iloc[-1]
+                size = self.risk_manager.calculate_position_size(equity, current_atr, confidence, current_price)
+                if size > 0:
+                    action = "BUY" if direction > 0 else "SELL"
+                    logger.info(f"✅ PAPER EXECUTION (SIM): {action} {size:.4f} {symbol}")
+                    self.storage.store_trade(
+                        symbol=symbol,
+                        side=action,
+                        size=size,
+                        price=current_price,
+                        status="OPEN"
+                    )
                 
         elif self.mode == "live":
             equity = self.exchange.fetch_balance()['total']['USDT']

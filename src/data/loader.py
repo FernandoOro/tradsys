@@ -17,9 +17,10 @@ class DataLoader:
     def __init__(self, exchange_id: str = config.EXCHANGE_ID):
         try:
             self.exchange_class = getattr(ccxt, exchange_id)
+            default_type = 'future' if exchange_id in ['binanceusdm', 'binance_futures'] else 'spot'
             self.exchange = self.exchange_class({
                 'enableRateLimit': True, 
-                'options': {'defaultType': 'spot'}
+                'options': {'defaultType': default_type}
             })
         except AttributeError:
             raise ValueError(f"Exchange '{exchange_id}' not found in ccxt.")
