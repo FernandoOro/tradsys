@@ -100,6 +100,10 @@ def run_backtest():
     print(f"  Max: {sell_probs.max():.4f} | Mean: {sell_probs.mean():.4f} | >0.2: {(sell_probs > 0.2).sum()}")
     print("-" * 30)
     
+    # TP = 0.5%, SL = 0.5% (As defined in NEW labeling)
+    tp_stop = 0.005
+    sl_stop = 0.005
+    
     # --- OPTIMIZATION: SENSITIVITY ANALYSIS ---
     thresholds = [0.25, 0.30, 0.35, 0.40, 0.45, 0.50]
     
