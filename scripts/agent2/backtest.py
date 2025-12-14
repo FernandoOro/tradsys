@@ -79,7 +79,31 @@ def run_backtest():
     print(df_val['target_reversion'].value_counts())
     print("\n[DIAGNOSTIC] Prediction Distribution (Model Output):")
     print(df_val['prediction'].value_counts())
+    
+    # Check Probability Distribution for Minority Classes
+    buy_probs = []
+    sell_probs = []
+    with torch.no_grad():
+        for bx in loader:
+            bx = bx[0].to(device)
+            logits = model(bx)
+            probs = torch.softmax(logits, dim=1)
+            buy_probs.extend(probs[:, 1].cpu().numpy())
+            sell_probs.extend(probs[:, 2].cpu().numpy())
+            
+    buy_probs = np.array(buy_probs)
+    sell_probs = np.array(sell_probs)
+    
+    print(f"\n[DIAGNOSTIC] Buy Probabilities (Class 1):")
+    print(f"  Max: {buy_probs.max():.4f} | Mean: {buy_probs.mean():.4f} | >0.2: {(buy_probs > 0.2).sum()}")
+    print(f"[DIAGNOSTIC] Sell Probabilities (Class 2):")
+    print(f"  Max: {sell_probs.max():.4f} | Mean: {sell_probs.mean():.4f} | >0.2: {(sell_probs > 0.2).sum()}")
     print("-" * 30)
+    
+    # Override Prediction with Threshold if Argmax failed check
+    # If Max Prob > 0.3, force signal? (Experimental)
+    # threshold = 0.3
+    # df_val['prediction'] = np.where(buy_probs > threshold, 1, np.where(sell_probs > threshold, 2, 0))
     
     # 4. Simulation Logic
     # Agent 2 Logic:
