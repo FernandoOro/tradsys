@@ -35,8 +35,10 @@ class ReversionDataPipeline(DataPipeline):
         
         # 3b. Generate Target (REVERSION LOGIC)
         logger.info("Step 2b (Agent 2): Generating Reversion Labels (Ping Pong)...")
-        from src.data.labeling import Labeler
-        labeler = Labeler(barrier_width=1.5, time_horizon=24) 
+        # 3b. Generate Target (REVERSION LOGIC)
+        logger.info("Step 2b (Agent 2): Generating Reversion Labels (Ping Pong)...")
+        from src.agent2.labeling import ReversionLabeler
+        labeler = ReversionLabeler() 
         
         # USE NEW METHOD
         df = labeler.add_reversion_targets(df, horizon=24)
