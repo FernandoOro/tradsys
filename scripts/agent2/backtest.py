@@ -159,6 +159,7 @@ def run_backtest():
         slippage=0.0005, # 0.05% slippage
         sl_stop=sl_stop,
         tp_stop=tp_stop,
+        timeout_stop='24h', # Force exit after 24 hours (Match Labeling Horizon)
         init_cash=10000,
         freq='1h'
     )
