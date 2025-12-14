@@ -149,17 +149,23 @@ def run_backtest():
     tp_stop = 0.005
     sl_stop = 0.005
     
-    logger.info(f"Simulating Trades (TP={tp_stop*100}%, SL={sl_stop*100}%)...")
+    # Implement 24h Timeout manually for VectorBT compatibility
+    # We create a forced exit signal 24 bars (hours) after entry
+    exits = entries.shift(24).fillna(False)
+    short_exits = short_entries.shift(24).fillna(False)
+    
+    logger.info(f"Simulating Trades (TP={tp_stop*100}%, SL={sl_stop*100}%, Timeout=24h)...")
     
     portfolio = vbt.Portfolio.from_signals(
         df_val['close'],
         entries,
-        short_entries=short_entries, # Dual direction!
-        fees=0.001, # 0.1% per side
+        exits=exits,     # Forced exit after 24h
+        short_entries=short_entries, 
+        short_exits=short_exits, # Forced exit after 24h
+        fees=0.001,      # 0.1% per side
         slippage=0.0005, # 0.05% slippage
         sl_stop=sl_stop,
         tp_stop=tp_stop,
-        timeout_stop='24h', # Force exit after 24 hours (Match Labeling Horizon)
         init_cash=10000,
         freq='1h'
     )
