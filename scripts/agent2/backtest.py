@@ -133,26 +133,54 @@ def run_backtest():
     
     logger.info(f"Applying Threshold {THRESHOLD} (Sniper Mode) -> Trades: {entries.sum() + short_entries.sum()}")
 
-    # Simulation
-    portfolio = vbt.Portfolio.from_signals(
+    logger.info(f"Applying Threshold {THRESHOLD} (Sniper Mode) -> Trades: {entries.sum() + short_entries.sum()}")
+
+    # 1. Net Simulation (Reality)
+    pf_net = vbt.Portfolio.from_signals(
         df_val['close'],
         entries,
         exits=exits,
         short_entries=short_entries,
         short_exits=short_exits,
-        fees=0.001,
-        slippage=0.0005,
+        fees=0.001,      # 0.1% Taker
+        slippage=0.0005, # 0.05%
+        sl_stop=sl_stop,
+        tp_stop=tp_stop,
+        init_cash=10000,
+        freq='1h'
+    )
+    
+    # 2. Gross Simulation (Potential)
+    pf_gross = vbt.Portfolio.from_signals(
+        df_val['close'],
+        entries,
+        exits=exits,
+        short_entries=short_entries,
+        short_exits=short_exits,
+        fees=0.0,        # Zero Fees
+        slippage=0.0,    # Zero Slippage
         sl_stop=sl_stop,
         tp_stop=tp_stop,
         init_cash=10000,
         freq='1h'
     )
         
-    stats = portfolio.stats()
+    stats_net = pf_net.stats()
+    stats_gross = pf_gross.stats()
+    
     print("\n" + "="*50)
     print("   AGENT 2 PERFORMANCE (VALIDATION SET)   ")
     print("="*50) 
-    print(stats)
+    print(f"{'Metric':<20} | {'Net (Real)':<15} | {'Gross (Signal)':<15}")
+    print("-" * 56)
+    print(f"{'Total Return [%]':<20} | {stats_net['Total Return [%]']:<15.2f} | {stats_gross['Total Return [%]']:<15.2f}")
+    print(f"{'Win Rate [%]':<20} | {stats_net['Win Rate [%]']:<15.2f} | {stats_gross['Win Rate [%]']:<15.2f}")
+    print(f"{'Sharpe Ratio':<20} | {stats_net['Sharpe Ratio']:<15.2f} | {stats_gross['Sharpe Ratio']:<15.2f}")
+    print(f"{'Total Trades':<20} | {stats_net['Total Trades']:<15} | {stats_gross['Total Trades']:<15}")
+    print(f"{'Fees Paid [$]':<20} | {stats_net['Total Fees Paid']:<15.2f} | {'0.00':<15}")
+    print("-" * 56)
+    print("NOTE: High Gross but low Net means 'Good AI, Bad Fees'.")
+    print("Solution -> Use Limit Orders (Maker) or VIP Tiers.")
     print("="*50 + "\n")
     
 if __name__ == "__main__":
