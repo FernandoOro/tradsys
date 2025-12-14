@@ -145,8 +145,8 @@ def run_backtest():
     # But implementation plan says "Use SL/TP from Triple Barrier Logic".
     # Here allows VectorBT to manage SL/TP.
     
-    # TP = 1.0%, SL = 0.5% (As defined in Labeling)
-    tp_stop = 0.01
+    # TP = 0.5%, SL = 0.5% (As defined in NEW labeling)
+    tp_stop = 0.005
     sl_stop = 0.005
     
     logger.info(f"Simulating Trades (TP={tp_stop*100}%, SL={sl_stop*100}%)...")
