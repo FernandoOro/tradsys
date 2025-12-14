@@ -74,6 +74,13 @@ def run_backtest():
             
     df_val['prediction'] = all_preds
     
+    # --- DEBUG: DIAGNOSE SILENCE ---
+    print("\n[DIAGNOSTIC] Label Distribution (Ground Truth):")
+    print(df_val['target_reversion'].value_counts())
+    print("\n[DIAGNOSTIC] Prediction Distribution (Model Output):")
+    print(df_val['prediction'].value_counts())
+    print("-" * 30)
+    
     # 4. Simulation Logic
     # Agent 2 Logic:
     # 1 = Buy Signal (Reversion UP)
