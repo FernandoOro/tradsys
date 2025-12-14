@@ -100,85 +100,65 @@ def run_backtest():
     print(f"  Max: {sell_probs.max():.4f} | Mean: {sell_probs.mean():.4f} | >0.2: {(sell_probs > 0.2).sum()}")
     print("-" * 30)
     
-    # --- ACTIVATION: THRESHOLD LOGIC ---
-    # Argmax chooses class 0 because prob(0) is usually ~0.6 and prob(1) ~0.3.
-    # But 0.3 is HUGE for a rare event. We activate if prob > Threshold.
-    THRESHOLD = 0.25
+    # --- OPTIMIZATION: SENSITIVITY ANALYSIS ---
+    thresholds = [0.25, 0.30, 0.35, 0.40, 0.45, 0.50]
     
-    # 0 = Wait, 1 = Buy, 2 = Sell
-    # Priority: If both > Threshold, take the higher one.
-    
-    final_preds = np.zeros(len(df_val), dtype=int)
-    
-    # Vectorized Logic
-    # Mask where Buy > Threshold
-    buy_mask = buy_probs > THRESHOLD
-    # Mask where Sell > Threshold
-    sell_mask = sell_probs > THRESHOLD
-    
-    # Conflict resolution: If both are high, pick max
-    conflict_mask = buy_mask & sell_mask
-    
-    # Case 1: Only Buy
-    final_preds[buy_mask & (~sell_mask)] = 1
-    # Case 2: Only Sell
-    final_preds[sell_mask & (~buy_mask)] = 2
-    # Case 3: Conflict - compare values
-    final_preds[conflict_mask] = np.where(
-        buy_probs[conflict_mask] > sell_probs[conflict_mask], 1, 2
-    )
-    
-    df_val['prediction'] = final_preds
-    logger.info(f"Applying Threshold {THRESHOLD} -> Trades Activated: {(final_preds!=0).sum()}")
-    
-    # 4. Simulation Logic
-    # Agent 2 Logic:
-    # 1 = Buy Signal (Reversion UP)
-    # 2 = Sell Signal (Reversion DOWN)
-    # 0 = Wait
-    
-    entries = df_val['prediction'] == 1
-    short_entries = df_val['prediction'] == 2 # If futures supported
-    
-    # Exits: 
-    # For simplicity in this backtest, let's use Fixed Time or Reverse Signal + SL/TP
-    # But implementation plan says "Use SL/TP from Triple Barrier Logic".
-    # Here allows VectorBT to manage SL/TP.
-    
-    # TP = 0.5%, SL = 0.5% (As defined in NEW labeling)
-    tp_stop = 0.005
-    sl_stop = 0.005
-    
-    # Implement 24h Timeout manually for VectorBT compatibility
-    # We create a forced exit signal 24 bars (hours) after entry
-    exits = entries.shift(24).fillna(False)
-    short_exits = short_entries.shift(24).fillna(False)
-    
-    logger.info(f"Simulating Trades (TP={tp_stop*100}%, SL={sl_stop*100}%, Timeout=24h)...")
-    
-    portfolio = vbt.Portfolio.from_signals(
-        df_val['close'],
-        entries,
-        exits=exits,     # Forced exit after 24h
-        short_entries=short_entries, 
-        short_exits=short_exits, # Forced exit after 24h
-        fees=0.001,      # 0.1% per side
-        slippage=0.0005, # 0.05% slippage
-        sl_stop=sl_stop,
-        tp_stop=tp_stop,
-        init_cash=10000,
-        freq='1h'
-    )
-    
-    # 5. Report
-    print("\n" + "="*50)
-    print("   AGENT 2 PERFORMANCE (VALIDATION SET)   ")
-    print("="*50)
-    # Call stats() without arguments to get the full default report
-    # This avoids KeyError if specific metric names differ by version
-    stats = portfolio.stats() 
-    print(stats)
-    print("="*50 + "\n")
+    print(f"\n{'='*20} SENSITIVITY ANALYSIS {'='*20}")
+    print(f"{'Threshold':<10} | {'Trades':<8} | {'Win Rate':<10} | {'Return [%]':<10} | {'Sharpe':<10}")
+    print("-" * 70)
+
+    for THRESHOLD in thresholds:
+        final_preds = np.zeros(len(df_val), dtype=int)
+        
+        # Vectorized Logic
+        buy_mask = buy_probs > THRESHOLD
+        sell_mask = sell_probs > THRESHOLD
+        conflict_mask = buy_mask & sell_mask
+        
+        final_preds[buy_mask & (~sell_mask)] = 1
+        final_preds[sell_mask & (~buy_mask)] = 2
+        final_preds[conflict_mask] = np.where(buy_probs[conflict_mask] > sell_probs[conflict_mask], 1, 2)
+        
+        # Signals
+        entries = pd.Series(final_preds == 1, index=df_val.index)
+        short_entries = pd.Series(final_preds == 2, index=df_val.index)
+        
+        # Exits (24h Timeout)
+        exits = entries.shift(24).fillna(False)
+        short_exits = short_entries.shift(24).fillna(False)
+
+        if entries.sum() + short_entries.sum() == 0:
+            print(f"{THRESHOLD:<10} | {0:<8} | {'NaN':<10} | {0.0:<10} | {'NaN':<10}")
+            continue
+
+        # Simulation
+        try:
+             portfolio = vbt.Portfolio.from_signals(
+                df_val['close'],
+                entries,
+                exits=exits,
+                short_entries=short_entries,
+                short_exits=short_exits,
+                fees=0.001,
+                slippage=0.0005,
+                sl_stop=sl_stop,
+                tp_stop=tp_stop,
+                init_cash=10000,
+                freq='1h'
+            )
+             
+             stats = portfolio.stats()
+             trades = stats['Total Trades']
+             win_rate = stats['Win Rate [%]']
+             ret = stats['Total Return [%]']
+             sharpe = stats['Sharpe Ratio']
+             
+             print(f"{THRESHOLD:<10} | {trades:<8} | {win_rate:<10.2f} | {ret:<10.2f} | {sharpe:<10.2f}")
+             
+        except Exception as e:
+            logger.error(f"Error at threshold {THRESHOLD}: {e}")
+
+    print("="*70 + "\n")
     
 if __name__ == "__main__":
     run_backtest()
