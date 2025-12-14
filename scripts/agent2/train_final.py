@@ -21,12 +21,12 @@ from src.config import config
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# --- BEST PARAMS FROM RUNPOD (Trial 3) ---
+# --- BEST PARAMS FROM RUNPOD (Trial 49 - Relaxed Logic) ---
 BEST_PARAMS = {
-    'lr': 2.5554092418003832e-05,
-    'batch_size': 256,
-    'dropout': 0.1299310081487177,
-    'focal_gamma': 2.770672235352367
+    'lr': 0.00021523840077481338,
+    'batch_size': 64,
+    'dropout': 0.39059584010066684,
+    'focal_gamma': 1.2315749830352065
 }
 
 def load_data_labeled(path):
