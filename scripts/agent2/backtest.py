@@ -100,10 +100,36 @@ def run_backtest():
     print(f"  Max: {sell_probs.max():.4f} | Mean: {sell_probs.mean():.4f} | >0.2: {(sell_probs > 0.2).sum()}")
     print("-" * 30)
     
-    # Override Prediction with Threshold if Argmax failed check
-    # If Max Prob > 0.3, force signal? (Experimental)
-    # threshold = 0.3
-    # df_val['prediction'] = np.where(buy_probs > threshold, 1, np.where(sell_probs > threshold, 2, 0))
+    # --- ACTIVATION: THRESHOLD LOGIC ---
+    # Argmax chooses class 0 because prob(0) is usually ~0.6 and prob(1) ~0.3.
+    # But 0.3 is HUGE for a rare event. We activate if prob > Threshold.
+    THRESHOLD = 0.25
+    
+    # 0 = Wait, 1 = Buy, 2 = Sell
+    # Priority: If both > Threshold, take the higher one.
+    
+    final_preds = np.zeros(len(df_val), dtype=int)
+    
+    # Vectorized Logic
+    # Mask where Buy > Threshold
+    buy_mask = buy_probs > THRESHOLD
+    # Mask where Sell > Threshold
+    sell_mask = sell_probs > THRESHOLD
+    
+    # Conflict resolution: If both are high, pick max
+    conflict_mask = buy_mask & sell_mask
+    
+    # Case 1: Only Buy
+    final_preds[buy_mask & (~sell_mask)] = 1
+    # Case 2: Only Sell
+    final_preds[sell_mask & (~buy_mask)] = 2
+    # Case 3: Conflict - compare values
+    final_preds[conflict_mask] = np.where(
+        buy_probs[conflict_mask] > sell_probs[conflict_mask], 1, 2
+    )
+    
+    df_val['prediction'] = final_preds
+    logger.info(f"Applying Threshold {THRESHOLD} -> Trades Activated: {(final_preds!=0).sum()}")
     
     # 4. Simulation Logic
     # Agent 2 Logic:
