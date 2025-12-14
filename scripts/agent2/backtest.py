@@ -110,7 +110,10 @@ def run_backtest():
     print("\n" + "="*50)
     print("   AGENT 2 PERFORMANCE (VALIDATION SET)   ")
     print("="*50)
-    print(portfolio.stats(['Total Return [%]', 'Sharpe Ratio', 'Max Drawdown [%]', 'Win Rate [%]', 'Total Trades']))
+    # Call stats() without arguments to get the full default report
+    # This avoids KeyError if specific metric names differ by version
+    stats = portfolio.stats() 
+    print(stats)
     print("="*50 + "\n")
     
 if __name__ == "__main__":
