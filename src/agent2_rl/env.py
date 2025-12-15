@@ -19,7 +19,7 @@ class TradingEnv(gym.Env):
     
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, df, window_size=96, initial_balance=10000.0, fee_rate=0.001, slippage=0.0005):
+    def __init__(self, df, window_size=96, initial_balance=10000.0, fee_rate=0.0, slippage=0.0):
         super(TradingEnv, self).__init__()
 
         self.df = df.reset_index(drop=True)
