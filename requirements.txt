@@ -19,3 +19,6 @@ onnxruntime
 onnx
 onnxscript
 psutil
+stable-baselines3
+gymnasium
+shimmy
