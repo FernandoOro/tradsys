@@ -23,3 +23,5 @@ stable-baselines3
 gymnasium
 shimmy
 tensorboard
+rich
+tqdm
